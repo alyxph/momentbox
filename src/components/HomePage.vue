@@ -73,8 +73,7 @@ const emit = defineEmits(['start', 'settings']);
         display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;"
     >
         <AppLogo type="MAIN" :size="300" style="filter: drop-shadow(8px 8px 0 #000);" />
-      </div>
-
+      
       <!-- Subtitle banner -->
       <div style="margin: 16px 0 32px;">
         <div
