@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Potobooth</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+
+    @keyframes floatA {
+      0%,100% { transform: translateY(0) rotate(0deg); }
+      33%      { transform: translateY(-18px) rotate(6deg); }
+      66%      { transform: translateY(-9px) rotate(-4deg); }
+    }
+    @keyframes floatB {
+      0%,100% { transform: translateY(0) rotate(0deg); }
+      33%      { transform: translateY(-22px) rotate(-5deg); }
+      66%      { transform: translateY(-10px) rotate(7deg); }
+    }
+    @keyframes floatC {
+      0%,100% { transform: translateY(0) rotate(0deg); }
+      50%      { transform: translateY(-14px) rotate(10deg); }
+    }
+    @keyframes pulseCam {
+      0%,100% { transform: scale(1);    box-shadow: 0 0 0 0 rgba(0,229,255,.6); }
+      50%      { transform: scale(1.06); box-shadow: 0 0 0 18px rgba(0,229,255,0); }
+    }
+    @keyframes countPop {
+      0%   { transform: scale(2.5); opacity: 0; }
+      40%  { transform: scale(1);   opacity: 1; }
+      80%  { transform: scale(1);   opacity: 1; }
+      100% { transform: scale(.4);  opacity: 0; }
+    }
+    @keyframes flashBlink {
+      0%,100% { opacity: 0; }
+      40%,60% { opacity: 1; }
+    }
+    @keyframes slideUp {
+      from { transform: translateY(24px); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+    @keyframes bounceIn {
+      0%  { transform: scale(.3);  opacity: 0; }
+      60% { transform: scale(1.12); }
+      80% { transform: scale(.96); }
+      100%{ transform: scale(1);   opacity: 1; }
+    }
+    @keyframes shimmer {
+      0%   { background-position: -400px 0; }
+      100% { background-position:  400px 0; }
+    }
+
+    .fa  { animation: floatA 4s   ease-in-out infinite; }
+    .fb  { animation: floatB 5s   ease-in-out infinite .7s; }
+    .fc  { animation: floatC 3.5s ease-in-out infinite 1.4s; }
+    .pulse-cam { animation: pulseCam 2s ease-in-out infinite; }
+    .count-pop { animation: countPop 1s ease-out forwards; }
+    .slide-up  { animation: slideUp .45s ease-out; }
+    .bounce-in { animation: bounceIn .6s cubic-bezier(.175,.885,.32,1.275); }
+
+    .flash-screen {
+      position: fixed; inset: 0; z-index: 9999;
+      background: white; pointer-events: none;
+      animation: flashBlink .35s ease-out;
+    }
+    .checkerboard {
+      background-color: #FFD700;
+      background-image:
+        linear-gradient(45deg,#FFC000 25%,transparent 25%),
+        linear-gradient(-45deg,#FFC000 25%,transparent 25%),
+        linear-gradient(45deg,transparent 75%,#FFC000 75%),
+        linear-gradient(-45deg,transparent 75%,#FFC000 75%);
+      background-size: 28px 28px;
+      background-position: 0 0, 0 14px, 14px -14px, -14px 0px;
+    }
+    .btn-3d {
+      transition: transform .08s, box-shadow .08s;
+      cursor: pointer;
+    }
+    .btn-3d:active {
+      transform: translate(4px,4px) !important;
+      box-shadow: none !important;
+    }
+    .frame-card {
+      transition: transform .2s, box-shadow .2s;
+      cursor: pointer;
+    }
+    .frame-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 30px rgba(0,0,0,.2);
+    }
+    .video-mirror { transform: scaleX(-1); }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #111; }
+    ::-webkit-scrollbar-thumb { background: #FF4CB0; border-radius: 4px; }
+  </style>
+</head>
+<body>
+<div id="app" style="width:100vw;height:100vh;font-family:'Nunito',sans-serif;position:relative;overflow:hidden;">
+
+  <!-- ══════════════ HOME PAGE ══════════════ -->
+  <div v-if="page==='home'"
+       style="width:100%;height:100%;background:#FF4CB0;position:relative;overflow:hidden;
+              display:flex;flex-direction:column;align-items:center;justify-content:center;">
+
+    <!-- Floating blobs -->
+    <div class="fa"  style="position:absolute;top:6%;left:5%;width:80px;height:80px;background:#FFD700;border-radius:50%;border:4px solid #000;"></div>
+    <div class="fb"  style="position:absolute;top:8%;right:16%;width:55px;height:55px;background:#A855F7;border-radius:50%;border:3px solid #000;"></div>
+    <div class="fc"  style="position:absolute;top:18%;left:22%;width:28px;height:28px;background:#00E5FF;border-radius:50%;border:3px solid #000;"></div>
+    <div class="fa"  style="position:absolute;top:42%;left:2%;width:50px;height:50px;background:#FF6B35;border-radius:50%;border:3px solid #000;"></div>
+    <div class="fb"  style="position:absolute;top:55%;right:4%;width:65px;height:65px;background:#00E5FF;border-radius:50%;border:3px solid #000;"></div>
+    <div class="fc"  style="position:absolute;bottom:12%;left:7%;width:60px;height:60px;background:#FFD700;border-radius:50%;border:4px solid #000;"></div>
+    <div class="fa"  style="position:absolute;bottom:18%;right:10%;width:45px;height:45px;background:#10B981;border-radius:50%;border:3px solid #000;"></div>
+    <div class="fb"  style="position:absolute;bottom:35%;left:16%;width:22px;height:22px;background:#FFD700;border-radius:50%;border:2px solid #000;"></div>
+    <div class="fc"  style="position:absolute;top:32%;right:8%;width:35px;height:35px;background:#FF6B35;border-radius:50%;border:3px solid #000;"></div>
+    <!-- squares -->
+    <div class="fb"  style="position:absolute;top:48%;left:11%;width:38px;height:38px;background:#FF6B35;border:3px solid #000;transform:rotate(18deg);"></div>
+    <div class="fa"  style="position:absolute;bottom:22%;right:18%;width:30px;height:30px;background:#A855F7;border:3px solid #000;transform:rotate(-12deg);"></div>
+    <!-- small accent -->
+    <div class="fc"  style="position:absolute;top:65%;left:42%;width:18px;height:18px;background:#00E5FF;border-radius:50%;border:2px solid #000;"></div>
+    <div class="fa"  style="position:absolute;top:75%;right:30%;width:22px;height:22px;background:#FFD700;border-radius:50%;border:2px solid #000;"></div>
+
+    <!-- Main content -->
+    <div class="bounce-in" style="text-align:center;position:relative;z-index:10;padding:20px;">
+      <!-- Title -->
+      <h1 style="font-family:'Bangers',cursive;font-size:clamp(56px,11vw,120px);
+                 color:white;letter-spacing:5px;line-height:1;
+                 -webkit-text-stroke:3px #000;
+                 text-shadow:5px 5px 0 #000, 8px 8px 0 rgba(0,0,0,.2);">
+        POTOBOOTH
+      </h1>
+
+      <!-- Subtitle banner -->
+      <div style="position:relative;display:inline-block;margin:16px 0 28px;">
+        <div style="background:#000;padding:10px 32px;border:4px solid #FFD700;
+                    box-shadow:4px 4px 0 #FFD700;">
+          <p style="font-family:'Bangers',cursive;font-size:clamp(14px,2.8vw,22px);
+                    color:#FFD700;letter-spacing:3px;">
+            CAPTURE YOUR BEST MOMENTS!
+          </p>
+        </div>
+      </div>
+
+      <!-- Camera button -->
+      <div>
+        <button @click="goToCamera"
+                class="pulse-cam"
+                style="width:100px;height:100px;background:#00E5FF;border-radius:50%;
+                       border:5px solid #000;font-size:42px;
+                       display:inline-flex;align-items:center;justify-content:center;
+                       box-shadow:6px 6px 0 #000;cursor:pointer;outline:none;">
+          📷
+        </button>
+        <p style="color:white;font-family:'Bangers',cursive;font-size:16px;
+                  letter-spacing:3px;margin-top:12px;text-shadow:2px 2px 0 #000;">
+          KLIK UNTUK MULAI
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ CAMERA PAGE ══════════════ -->
+  <div v-else-if="page==='camera'"
+       style="width:100%;height:100%;background:#0d0d1a;
+              display:flex;align-items:center;justify-content:center;
+              gap:24px;padding:20px;overflow:hidden;">
+
+    <!-- Left: Video + Status -->
+    <div style="flex:1;max-width:640px;display:flex;flex-direction:column;align-items:center;gap:14px;">
+
+      <!-- Title -->
+      <div class="slide-up" style="text-align:center;">
+        <h2 style="font-family:'Bangers',cursive;font-size:clamp(24px,4vw,38px);
+                   color:#FF4CB0;letter-spacing:3px;text-shadow:3px 3px 0 rgba(255,76,176,.3);">
+          📸 FOTO {{ Math.min(photos.length + 1, 4) }} / 4
+        </h2>
+        <p style="color:#888;font-size:13px;margin-top:2px;letter-spacing:1px;">{{ statusText }}</p>
+      </div>
+
+      <!-- Video -->
+      <div style="position:relative;width:100%;max-width:580px;
+                  border:5px solid #FF4CB0;border-radius:6px;overflow:hidden;
+                  box-shadow:0 0 50px rgba(255,76,176,.35);">
+        <video ref="videoEl" autoplay playsinline class="video-mirror"
+               style="width:100%;height:auto;display:block;background:#000;min-height:200px;"></video>
+
+        <!-- Countdown -->
+        <div v-if="countdown>0"
+             style="position:absolute;inset:0;background:rgba(0,0,0,.55);
+                    display:flex;align-items:center;justify-content:center;">
+          <div :key="countdown" class="count-pop"
+               style="font-family:'Bangers',cursive;font-size:130px;
+                      color:#FFD700;text-shadow:4px 4px 0 #FF4CB0,0 0 60px rgba(255,215,0,.8);">
+            {{ countdown }}
+          </div>
+        </div>
+
+        <!-- Smile flash -->
+        <div v-if="showSmile"
+             style="position:absolute;bottom:16px;left:50%;transform:translateX(-50%);
+                    background:#FFD700;padding:8px 22px;border:3px solid #000;border-radius:4px;">
+          <span style="font-family:'Bangers',cursive;font-size:22px;color:#000;letter-spacing:2px;">
+            😄 SENYUM!
+          </span>
+        </div>
+
+        <!-- Overlay grid lines -->
+        <div style="position:absolute;inset:0;pointer-events:none;
+                    background:linear-gradient(rgba(255,76,176,.08) 1px,transparent 1px),
+                               linear-gradient(90deg,rgba(255,76,176,.08) 1px,transparent 1px);
+                    background-size:60px 60px;">
+        </div>
+      </div>
+
+      <!-- Progress bar -->
+      <div style="width:100%;max-width:580px;">
+        <div style="height:10px;background:#222;border-radius:5px;border:2px solid #333;overflow:hidden;">
+          <div :style="`width:${(photos.length/4)*100}%;
+                        background:linear-gradient(90deg,#FF4CB0,#FFD700);
+                        height:100%;border-radius:5px;transition:width .4s ease;`">
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:5px;">
+          <span style="color:#555;font-size:11px;letter-spacing:1px;">{{ photos.length }}/4 foto diambil</span>
+          <span style="color:#555;font-size:11px;">{{ isCapturing ? 'Memotret...' : 'Siap' }}</span>
+        </div>
+      </div>
+
+      <!-- Start button -->
+      <button v-if="!isCapturing && photos.length===0"
+              @click="startCapture"
+              class="btn-3d"
+              style="background:#FF4CB0;color:white;font-family:'Bangers',cursive;font-size:22px;
+                     letter-spacing:2px;padding:12px 44px;border:4px solid #000;
+                     box-shadow:5px 5px 0 #000;outline:none;">
+        🎬 &nbsp;MULAI FOTO
+      </button>
+
+      <!-- Retake button (shows after fail or manual) -->
+      <button v-if="cameraError"
+              @click="goToCamera"
+              class="btn-3d"
+              style="background:#FFD700;color:#000;font-family:'Bangers',cursive;font-size:18px;
+                     letter-spacing:2px;padding:10px 30px;border:4px solid #000;box-shadow:4px 4px 0 #000;outline:none;">
+        🔄 &nbsp;COBA LAGI
+      </button>
+      <div v-if="cameraError"
+           style="color:#f87171;font-size:13px;text-align:center;padding:0 20px;">
+        {{ cameraError }}
+      </div>
+    </div>
+
+    <!-- Right: Strip preview -->
+    <div style="width:150px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:10px;">
+      <h3 style="font-family:'Bangers',cursive;color:#FFD700;font-size:16px;
+                 letter-spacing:2px;text-align:center;text-shadow:2px 2px 0 rgba(0,0,0,.5);">
+        PREVIEW
+      </h3>
+      <div style="width:100%;background:white;padding:7px;border:4px solid #FF4CB0;
+                  box-shadow:0 0 20px rgba(255,76,176,.4);">
+        <div v-for="n in 4" :key="n"
+             style="width:100%;aspect-ratio:4/3;background:#111;border:2px solid #ddd;
+                    overflow:hidden;position:relative;margin-bottom:4px;">
+          <img v-if="photos[n-1]" :src="photos[n-1]"
+               style="width:100%;height:100%;object-fit:cover;">
+          <div v-else
+               style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
+            <span style="color:#333;font-size:18px;">📷</span>
+          </div>
+          <!-- Badge -->
+          <div :style="`position:absolute;top:2px;left:2px;width:18px;height:18px;
+                        background:${photos[n-1]?'#10B981':'#444'};
+                        display:flex;align-items:center;justify-content:center;
+                        border-radius:2px;`">
+            <span style="color:white;font-size:9px;font-weight:900;">{{ n }}</span>
+          </div>
+        </div>
+      </div>
+      <p style="color:#555;font-size:10px;letter-spacing:1px;text-align:center;">4 STRIP LAYOUT</p>
+    </div>
+
+    <!-- Camera permission error overlay -->
+    <div v-if="cameraError && !stream"
+         style="position:absolute;inset:0;background:rgba(0,0,0,.8);
+                display:flex;align-items:center;justify-content:center;z-index:50;">
+      <div style="background:#1a1a2e;border:4px solid #FF4CB0;padding:30px;text-align:center;max-width:400px;border-radius:8px;">
+        <div style="font-size:50px;margin-bottom:12px;">🚫</div>
+        <h3 style="font-family:'Bangers',cursive;font-size:26px;color:#FF4CB0;letter-spacing:2px;">
+          KAMERA TIDAK BISA DIAKSES
+        </h3>
+        <p style="color:#888;font-size:13px;margin:10px 0 20px;">
+          Izinkan akses kamera di browser kamu, lalu coba lagi.
+        </p>
+        <div style="display:flex;gap:10px;justify-content:center;">
+          <button @click="goToCamera" class="btn-3d"
+                  style="background:#FF4CB0;color:white;font-family:'Bangers',cursive;font-size:18px;
+                         letter-spacing:2px;padding:10px 25px;border:3px solid #000;box-shadow:4px 4px 0 #000;outline:none;">
+            🔄 COBA LAGI
+          </button>
+          <button @click="goHome" class="btn-3d"
+                  style="background:#333;color:white;font-family:'Bangers',cursive;font-size:18px;
+                         letter-spacing:2px;padding:10px 25px;border:3px solid #000;box-shadow:4px 4px 0 #000;outline:none;">
+            🏠 PULANG
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Flash effect -->
+    <div v-if="showFlash" class="flash-screen"></div>
+    <!-- Hidden capture canvas -->
+    <canvas ref="captureCanvas" style="display:none;"></canvas>
+  </div>
+
+  <!-- ══════════════ FRAMES PAGE ══════════════ -->
+  <div v-else-if="page==='frames'"
+       class="checkerboard"
+       style="width:100%;height:100%;overflow-y:auto;">
+
+    <!-- Header -->
+    <div style="background:#FF4CB0;padding:14px 20px;border-bottom:5px solid #000;
+                display:flex;align-items:center;justify-content:space-between;
+                position:sticky;top:0;z-index:20;box-shadow:0 4px 0 #000;">
+      <div>
+        <h2 style="font-family:'Bangers',cursive;font-size:28px;color:white;
+                   letter-spacing:2px;text-shadow:2px 2px 0 #000;">
+          🎨 PILIH FRAME TEMA
+        </h2>
+        <p style="color:#ffe0f0;font-size:11px;font-weight:700;letter-spacing:2px;">
+          4 STRIP PHOTO LAYOUT
+        </p>
+      </div>
+      <button @click="goHome"
+              style="background:#000;color:white;border:none;width:38px;height:38px;
+                     font-size:18px;cursor:pointer;border-radius:4px;font-weight:900;
+                     display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        ✕
+      </button>
+    </div>
+
+    <!-- Grid -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));
+                gap:16px;padding:20px;max-width:960px;margin:0 auto;">
+      <div v-for="frame in frames" :key="frame.id"
+           class="frame-card"
+           :style="`background:white;border:4px solid #000;overflow:hidden;`"
+           @click="selectFrame(frame)">
+
+        <!-- Mini strip preview -->
+        <div :style="`background:${frame.bg};padding:8px;border-bottom:3px solid #000;`">
+          <div :style="`border:5px solid ${frame.accent};`">
+            <div :style="`background:${frame.patternBg};padding:6px;`">
+              <div style="display:flex;flex-direction:column;gap:5px;">
+                <div v-for="n in 4" :key="n"
+                     style="background:#ddd;border:1.5px solid #bbb;height:44px;
+                            display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;">
+                  <img v-if="photos[n-1]" :src="photos[n-1]"
+                       style="width:100%;height:100%;object-fit:cover;">
+                  <span v-else style="font-size:15px;color:#aaa;">📷</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Frame info -->
+        <div style="padding:9px 10px 4px;">
+          <h3 style="font-family:'Bangers',cursive;font-size:15px;letter-spacing:1px;color:#000;">
+            {{ frame.name }}
+          </h3>
+          <p style="font-size:9px;color:#888;font-weight:700;letter-spacing:1.5px;margin-top:1px;">
+            {{ frame.pattern }}
+          </p>
+        </div>
+
+        <!-- Select button -->
+        <button :style="`background:${frame.accent};color:${frame.btnText};
+                          width:100%;padding:9px;border:none;
+                          font-family:'Bangers',cursive;font-size:13px;letter-spacing:1.5px;
+                          cursor:pointer;border-top:3px solid #000;`">
+          PILIH TEMA INI
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ PREVIEW PAGE ══════════════ -->
+  <div v-else-if="page==='preview'"
+       style="width:100%;height:100%;background:#0d0d1a;overflow-y:auto;
+              display:flex;flex-direction:column;align-items:center;
+              padding:24px 16px;gap:20px;">
+
+    <!-- Title -->
+    <div class="slide-up" style="text-align:center;">
+      <h2 style="font-family:'Bangers',cursive;font-size:clamp(28px,5vw,48px);
+                 color:#FF4CB0;letter-spacing:4px;text-shadow:4px 4px 0 rgba(255,76,176,.3);">
+        ✨ FOTO STRIP KAMU ✨
+      </h2>
+      <p style="color:#666;font-size:13px;margin-top:4px;letter-spacing:1px;">
+        Frame: <span style="color:#FFD700;font-weight:900;">{{ selectedFrame?.name }}</span>
+      </p>
+    </div>
+
+    <!-- Canvas preview -->
+    <div style="position:relative;max-width:320px;width:100%;"
+         class="bounce-in">
+      <canvas ref="previewCanvas"
+              style="width:100%;height:auto;border:5px solid #FF4CB0;border-radius:4px;
+                     box-shadow:0 0 60px rgba(255,76,176,.45),0 0 120px rgba(255,76,176,.2);
+                     display:block;">
+      </canvas>
+      <!-- Loading overlay -->
+      <div v-if="isRendering"
+           style="position:absolute;inset:0;background:rgba(13,13,26,.8);
+                  display:flex;align-items:center;justify-content:center;border-radius:4px;">
+        <div style="text-align:center;">
+          <div style="font-size:40px;margin-bottom:8px;">⏳</div>
+          <p style="font-family:'Bangers',cursive;color:#FFD700;font-size:20px;letter-spacing:2px;">
+            MEMPROSES...
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action buttons -->
+    <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;padding-bottom:20px;">
+      <button @click="downloadPhoto"
+              class="btn-3d"
+              style="background:#FFD700;color:#000;font-family:'Bangers',cursive;font-size:20px;
+                     letter-spacing:2px;padding:12px 30px;border:4px solid #000;
+                     box-shadow:5px 5px 0 #000;outline:none;">
+        ⬇️ &nbsp;DOWNLOAD
+      </button>
+      <button @click="page='frames'"
+              class="btn-3d"
+              style="background:#7C3AED;color:white;font-family:'Bangers',cursive;font-size:20px;
+                     letter-spacing:2px;padding:12px 30px;border:4px solid #000;
+                     box-shadow:5px 5px 0 #000;outline:none;">
+        🖼️ &nbsp;GANTI FRAME
+      </button>
+      <button @click="retakePhotos"
+              class="btn-3d"
+              style="background:#374151;color:white;font-family:'Bangers',cursive;font-size:20px;
+                     letter-spacing:2px;padding:12px 30px;border:4px solid #000;
+                     box-shadow:5px 5px 0 #000;outline:none;">
+        📷 &nbsp;FOTO ULANG
+      </button>
+      <button @click="goHome"
+              class="btn-3d"
+              style="background:#FF4CB0;color:white;font-family:'Bangers',cursive;font-size:20px;
+                     letter-spacing:2px;padding:12px 30px;border:4px solid #000;
+                     box-shadow:5px 5px 0 #000;outline:none;">
+        🏠 &nbsp;HALAMAN AWAL
+      </button>
+    </div>
+  </div>
+
+</div><!-- end #app -->
+
+<script>
+const { createApp, ref, nextTick, onUnmounted } = Vue;
+
+createApp({
+  setup() {
+    /* ─── State ─── */
+    const page           = ref('home');
+    const photos         = ref([]);
+    const selectedFrame  = ref(null);
+    const countdown      = ref(0);
+    const isCapturing    = ref(false);
+    const showFlash      = ref(false);
+    const showSmile      = ref(false);
+    const isRendering    = ref(false);
+    const statusText     = ref('Siap-siap ya! 📸');
+    const cameraError    = ref('');
+
+    const videoEl        = ref(null);
+    const captureCanvas  = ref(null);
+    const previewCanvas  = ref(null);
+
+    let stream           = null;
+    let seqTimer         = null;
+
+    /* ─── Frame definitions ─── */
+    const frames = [
+      { id:'vintage',    name:'VINTAGE VIBES',  pattern:'DOTS PATTERN',     bg:'#FFF8E7', accent:'#92671A', patternBg:'#F0DEB0', btnText:'white' },
+      { id:'neon',       name:'NEON PARTY',      pattern:'STARS PATTERN',    bg:'#1a0533', accent:'#9333EA', patternBg:'#2D0B55', btnText:'white' },
+      { id:'beach',      name:'BEACH SUMMER',    pattern:'WAVES PATTERN',    bg:'#E0F7FA', accent:'#0891B2', patternBg:'#BAE8F2', btnText:'white' },
+      { id:'retro80s',   name:'RETRO 80S',       pattern:'STRIPES PATTERN',  bg:'#FF1493', accent:'#FFD700', patternBg:'#FF69B4', btnText:'#000'  },
+      { id:'minimalist', name:'MINIMALIST',      pattern:'CLEAN STYLE',      bg:'#FFFFFF', accent:'#111827', patternBg:'#F3F4F6', btnText:'white' },
+      { id:'kawaii',     name:'KAWAII CUTE',     pattern:'HEARTS PATTERN',   bg:'#FFF0F5', accent:'#EC4899', patternBg:'#FBCFE8', btnText:'white' },
+      { id:'urban',      name:'URBAN STREET',    pattern:'GRAFFITI PATTERN', bg:'#111827', accent:'#F59E0B', patternBg:'#1F2937', btnText:'#000'  },
+      { id:'garden',     name:'GARDEN PARTY',    pattern:'FLOWERS PATTERN',  bg:'#F0FDF4', accent:'#059669', patternBg:'#BBF7D0', btnText:'white' },
+    ];
+
+    /* ─── Canvas frame render configs ─── */
+    const FC = {
+      vintage:    { bg:'#FFF8E7', border:'#92671A', headerBg:'#92671A', headerText:'#FFF8E7', footerBg:'#F0DEB0', footerText:'#6B4C14' },
+      neon:       { bg:'#0D001A', border:'#9333EA', headerBg:'#5B21B6', headerText:'#E9D5FF', footerBg:'#2D0B55', footerText:'#C4B5FD' },
+      beach:      { bg:'#E0F7FA', border:'#0891B2', headerBg:'#0891B2', headerText:'#E0F7FA', footerBg:'#BAE8F2', footerText:'#0369A1' },
+      retro80s:   { bg:'#FF1493', border:'#FFD700', headerBg:'#FFD700', headerText:'#FF1493', footerBg:'#FF69B4', footerText:'#FFD700' },
+      minimalist: { bg:'#FFFFFF', border:'#111827', headerBg:'#111827', headerText:'#FFFFFF', footerBg:'#F3F4F6', footerText:'#374151' },
+      kawaii:     { bg:'#FFF0F5', border:'#EC4899', headerBg:'#EC4899', headerText:'#FFF0F5', footerBg:'#FBCFE8', footerText:'#9D174D' },
+      urban:      { bg:'#111827', border:'#F59E0B', headerBg:'#111827', headerText:'#F59E0B', footerBg:'#1F2937', footerText:'#FCD34D' },
+      garden:     { bg:'#F0FDF4', border:'#059669', headerBg:'#059669', headerText:'#F0FDF4', footerBg:'#BBF7D0', footerText:'#065F46' },
+    };
+
+    /* ─── Camera ─── */
+    async function startCamera() {
+      cameraError.value = '';
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width:{ideal:1280}, height:{ideal:720}, facingMode:'user' },
+          audio: false
+        });
+        await nextTick();
+        if (videoEl.value) {
+          videoEl.value.srcObject = stream;
+          await videoEl.value.play();
+        }
+      } catch(e) {
+        cameraError.value = 'Tidak dapat mengakses kamera. Izinkan akses kamera di browser kamu.';
+      }
+    }
+
+    function stopCamera() {
+      if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+      if (seqTimer) { clearTimeout(seqTimer); seqTimer = null; }
+    }
+
+    /* ─── Navigation ─── */
+    async function goToCamera() {
+      stopCamera();
+      photos.value = [];
+      isCapturing.value = false;
+      countdown.value = 0;
+      showSmile.value = false;
+      cameraError.value = '';
+      statusText.value = 'Tekan MULAI FOTO untuk memulai 📸';
+      page.value = 'camera';
+      await nextTick();
+      startCamera();
+    }
+
+    function goHome() {
+      stopCamera();
+      photos.value = [];
+      selectedFrame.value = null;
+      isCapturing.value = false;
+      countdown.value = 0;
+      page.value = 'home';
+    }
+
+    function retakePhotos() {
+      goToCamera();
+    }
+
+    /* ─── Capture sequence ─── */
+    function capturePhoto() {
+      const video  = videoEl.value;
+      const canvas = captureCanvas.value;
+      if (!video || !canvas) return;
+      const vw = video.videoWidth  || 640;
+      const vh = video.videoHeight || 480;
+      canvas.width  = vw;
+      canvas.height = vh;
+      const ctx = canvas.getContext('2d');
+      // Mirror to match what user sees
+      ctx.translate(vw, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0, vw, vh);
+      ctx.setTransform(1,0,0,1,0,0);
+      photos.value.push(canvas.toDataURL('image/jpeg', 0.92));
+      showFlash.value = true;
+      setTimeout(() => showFlash.value = false, 350);
+    }
+
+    function runCountdown(n, cb) {
+      countdown.value = n;
+      const tick = () => {
+        countdown.value--;
+        if (countdown.value > 0) seqTimer = setTimeout(tick, 1000);
+        else { countdown.value = 0; cb(); }
+      };
+      seqTimer = setTimeout(tick, 1000);
+    }
+
+    function captureNext() {
+      const idx = photos.value.length;
+      if (idx >= 4) {
+        isCapturing.value  = false;
+        statusText.value   = '✅ Semua foto berhasil! Pilih frame...';
+        stopCamera();
+        seqTimer = setTimeout(() => { page.value = 'frames'; }, 900);
+        return;
+      }
+      statusText.value = `Bersiap foto ${idx + 1}...`;
+      showSmile.value  = false;
+      runCountdown(3, () => {
+        showSmile.value  = true;
+        statusText.value = `Foto ${idx + 1} diambil! 🎉`;
+        capturePhoto();
+        seqTimer = setTimeout(() => {
+          showSmile.value = false;
+          captureNext();
+        }, 1100);
+      });
+    }
+
+    function startCapture() {
+      if (isCapturing.value || cameraError.value) return;
+      isCapturing.value = true;
+      photos.value      = [];
+      statusText.value  = 'Siap-siap...';
+      captureNext();
+    }
+
+    /* ─── Frame selection & canvas drawing ─── */
+    function selectFrame(frame) {
+      selectedFrame.value = frame;
+      page.value = 'preview';
+      nextTick(drawPreview);
+    }
+
+    function drawPattern(ctx, id, x, y, w, h) {
+      ctx.save();
+      ctx.globalAlpha = 0.22;
+      if (id === 'vintage') {
+        ctx.fillStyle = '#92671A';
+        for (let px = x+12; px < x+w; px += 22)
+          for (let py = y+12; py < y+h; py += 22) {
+            ctx.beginPath(); ctx.arc(px,py,3.5,0,Math.PI*2); ctx.fill();
+          }
+      } else if (id === 'neon') {
+        ctx.fillStyle = '#C084FC';
+        ctx.font = '16px Arial';
+        for (let px = x+14; px < x+w; px += 34)
+          for (let py = y+20; py < y+h; py += 34)
+            ctx.fillText('★', px, py);
+      } else if (id === 'beach') {
+        ctx.strokeStyle = '#38BDF8'; ctx.lineWidth = 2;
+        for (let py = y+14; py < y+h; py += 22) {
+          ctx.beginPath();
+          for (let px = x; px < x+w; px += 5) {
+            const wy = py + Math.sin(px/18)*5;
+            px === x ? ctx.moveTo(px,wy) : ctx.lineTo(px,wy);
+          }
+          ctx.stroke();
+        }
+      } else if (id === 'retro80s') {
+        ctx.strokeStyle = '#FF69B4'; ctx.lineWidth = 10;
+        for (let i = -h; i < w+h; i += 28) {
+          ctx.beginPath(); ctx.moveTo(x+i,y); ctx.lineTo(x+i+h,y+h); ctx.stroke();
+        }
+      } else if (id === 'minimalist') {
+        ctx.strokeStyle = '#D1D5DB'; ctx.lineWidth = 1;
+        for (let px = x; px < x+w; px += 20) {
+          ctx.beginPath(); ctx.moveTo(px,y); ctx.lineTo(px,y+h); ctx.stroke();
+        }
+        for (let py = y; py < y+h; py += 20) {
+          ctx.beginPath(); ctx.moveTo(x,py); ctx.lineTo(x+w,py); ctx.stroke();
+        }
+      } else if (id === 'kawaii') {
+        ctx.fillStyle = '#F472B6';
+        ctx.font = '15px Arial';
+        for (let px = x+10; px < x+w; px += 30)
+          for (let py = y+18; py < y+h; py += 30)
+            ctx.fillText('♥', px, py);
+      } else if (id === 'urban') {
+        ctx.strokeStyle = '#F59E0B'; ctx.lineWidth = 2;
+        for (let px = x; px < x+w; px += 40)
+          for (let py = y; py < y+h; py += 40)
+            ctx.strokeRect(px+6, py+6, 22, 22);
+      } else if (id === 'garden') {
+        ctx.fillStyle = '#34D399';
+        ctx.font = '16px Arial';
+        for (let px = x+10; px < x+w; px += 35)
+          for (let py = y+20; py < y+h; py += 35)
+            ctx.fillText('✿', px, py);
+      }
+      ctx.restore();
+    }
+
+    async function drawPreview() {
+      const canvas = previewCanvas.value;
+      if (!canvas || !selectedFrame.value) return;
+      isRendering.value = true;
+
+      const cfg      = FC[selectedFrame.value.id];
+      const W        = 380;
+      const PHOTO_W  = 318;
+      const PHOTO_H  = Math.round(PHOTO_W * 3/4); // 238
+      const PAD_X    = (W - PHOTO_W) / 2;          // 31
+      const HEADER   = 68;
+      const FOOTER   = 58;
+      const PAD_TOP  = 18;
+      const GAP      = 12;
+      const H        = HEADER + PAD_TOP + 4*PHOTO_H + 3*GAP + PAD_TOP + FOOTER;
+
+      canvas.width  = W;
+      canvas.height = H;
+
+      const ctx = canvas.getContext('2d');
+
+      /* Background */
+      ctx.fillStyle = cfg.bg;
+      ctx.fillRect(0, 0, W, H);
+
+      /* Pattern (between header & footer) */
+      drawPattern(ctx, selectedFrame.value.id, 0, HEADER, W, H - HEADER - FOOTER);
+
+      /* Header bar */
+      ctx.fillStyle = cfg.headerBg;
+      ctx.fillRect(0, 0, W, HEADER);
+      ctx.fillStyle = cfg.headerText;
+      ctx.font = `bold 20px 'Arial Black', Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('✦  ' + selectedFrame.value.name + '  ✦', W/2, HEADER/2);
+
+      /* Load photos */
+      const loadImg = src => new Promise(res => {
+        const img = new Image();
+        img.onload = () => res(img);
+        img.onerror = () => res(null);
+        img.src = src;
+      });
+      const imgs = await Promise.all(photos.value.map(p => loadImg(p)));
+
+      /* Photos */
+      for (let i = 0; i < 4; i++) {
+        const px = PAD_X;
+        const py = HEADER + PAD_TOP + i * (PHOTO_H + GAP);
+
+        /* Shadow */
+        ctx.shadowColor   = 'rgba(0,0,0,0.35)';
+        ctx.shadowBlur    = 10;
+        ctx.shadowOffsetY = 4;
+
+        /* Border layers */
+        ctx.fillStyle = cfg.border;
+        ctx.fillRect(px - 5, py - 5, PHOTO_W + 10, PHOTO_H + 10);
+        ctx.fillStyle = 'white';
+        ctx.fillRect(px - 3, py - 3, PHOTO_W + 6, PHOTO_H + 6);
+
+        ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+
+        /* Photo */
+        if (imgs[i]) {
+          ctx.drawImage(imgs[i], px, py, PHOTO_W, PHOTO_H);
+        } else {
+          ctx.fillStyle = '#D1D5DB';
+          ctx.fillRect(px, py, PHOTO_W, PHOTO_H);
+          ctx.fillStyle = '#9CA3AF';
+          ctx.font = '28px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('📷', px + PHOTO_W/2, py + PHOTO_H/2);
+        }
+
+        /* Number badge */
+        ctx.fillStyle = cfg.border;
+        ctx.fillRect(px, py, 24, 24);
+        ctx.fillStyle = cfg.headerText;
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(i+1, px+12, py+12);
+      }
+
+      /* Footer bar */
+      const fy = H - FOOTER;
+      ctx.fillStyle = cfg.footerBg;
+      ctx.fillRect(0, fy, W, FOOTER);
+      ctx.fillStyle = cfg.footerText;
+      ctx.font = `bold 13px 'Arial', sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const now = new Date();
+      const ds  = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()}`;
+      ctx.fillText(`📷 PHOTOBOOTH  ·  ${ds}`, W/2, fy + FOOTER/2);
+
+      /* Outer border */
+      ctx.strokeStyle = cfg.border;
+      ctx.lineWidth   = 7;
+      ctx.strokeRect(3.5, 3.5, W-7, H-7);
+
+      isRendering.value = false;
+    }
+
+    /* ─── Download ─── */
+    function downloadPhoto() {
+      const canvas = previewCanvas.value;
+      if (!canvas) return;
+      const a = document.createElement('a');
+      a.download = `photobooth-${selectedFrame.value?.id || 'strip'}-${Date.now()}.jpg`;
+      a.href     = canvas.toDataURL('image/jpeg', 0.95);
+      a.click();
+    }
+
+    onUnmounted(stopCamera);
+
+    return {
+      page, photos, selectedFrame, countdown, isCapturing,
+      showFlash, showSmile, isRendering, statusText, cameraError,
+      videoEl, captureCanvas, previewCanvas,
+      frames,
+      goToCamera, goHome, retakePhotos,
+      startCapture, selectFrame, downloadPhoto,
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
