@@ -74,9 +74,8 @@ const emit = defineEmits(['start', 'settings']);
     >
       <!-- Logo and Title -->
       <div style="display: flex; flex-direction: column; align-items: center; gap: 16px; margin-bottom: 8px;">
-        <AppLogo type="CAMERA" :size="100" style="filter: drop-shadow(6px 6px 0 #000);" />
         <h1
-          style="font-family: 'Bangers', cursive; font-size: clamp(60px, 10vw, 120px);
+          style="font-family: 'Bangers', cursive; font-size: clamp(60px, 12vw, 140px);
             color: #ff4cb0; letter-spacing: 5px; line-height: 1;
             text-shadow: 6px 6px 0 #000; margin: 0; padding: 0;"
         >
@@ -85,7 +84,7 @@ const emit = defineEmits(['start', 'settings']);
       </div>
       
       <!-- Subtitle banner -->
-      <div style="margin: 16px 0 32px;">
+      <div style="margin: 32px 0 48px;">
         <div
           style="background: #ffd700; padding: 12px 32px; border: 4px solid #000;
             box-shadow: 6px 6px 0 #000; display: inline-block; transform: rotate(-3deg);"
@@ -103,12 +102,15 @@ const emit = defineEmits(['start', 'settings']);
       <div style="display: flex; flex-direction: column; align-items: center; gap: 24px;">
         <button
           class="pulse-cam"
-          style="width: 140px; height: 140px; background: #00e5ff; border-radius: 50%;
+          style="width: 130px; height: 130px; background: #00e5ff; border-radius: 50%;
             border: 6px solid #000; display: inline-flex; align-items: center;
             justify-content: center; box-shadow: 8px 8px 0 #000; cursor: pointer; outline: none; padding: 0;"
           @click="emit('start')"
         >
-          <AppLogo type="CAMERA" :size="80" />
+          <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
         </button>
         
         <div
