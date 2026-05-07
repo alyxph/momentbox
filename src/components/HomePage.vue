@@ -1,4 +1,5 @@
 <script setup>
+import AppLogo from './AppLogo.vue';
 const emit = defineEmits(['start', 'settings']);
 </script>
 
@@ -71,17 +72,11 @@ const emit = defineEmits(['start', 'settings']);
         border: 6px solid #000; box-shadow: 16px 16px 0 #000; width: 90vw; max-width: 1000px; aspect-ratio: 16 / 9;
         display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;"
     >
-      <!-- Title -->
-      <h1
-        style="font-family: 'Bangers', cursive; font-size: clamp(60px, 12vw, 140px);
-          color: #ff4cb0; letter-spacing: 5px; line-height: 1;
-          text-shadow: 6px 6px 0 #000; margin: 0; padding: 0;"
-      >
-        MOMENTBOX
-      </h1>
+        <AppLogo type="MAIN" :size="300" style="filter: drop-shadow(8px 8px 0 #000);" />
+      </div>
 
       <!-- Subtitle banner -->
-      <div style="margin: 32px 0 48px;">
+      <div style="margin: 16px 0 32px;">
         <div
           style="background: #ffd700; padding: 12px 32px; border: 4px solid #000;
             box-shadow: 6px 6px 0 #000; display: inline-block; transform: rotate(-3deg);"
@@ -99,15 +94,12 @@ const emit = defineEmits(['start', 'settings']);
       <div style="display: flex; flex-direction: column; align-items: center; gap: 24px;">
         <button
           class="pulse-cam"
-          style="width: 120px; height: 120px; background: #00e5ff; border-radius: 50%;
+          style="width: 140px; height: 140px; background: #00e5ff; border-radius: 50%;
             border: 6px solid #000; display: inline-flex; align-items: center;
-            justify-content: center; box-shadow: 8px 8px 0 #000; cursor: pointer; outline: none;"
+            justify-content: center; box-shadow: 8px 8px 0 #000; cursor: pointer; outline: none; padding: 0;"
           @click="emit('start')"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 7h-3l-2-3H9L7 7H4c-1.1 0-2 .9-2 2v9c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2z"/>
-            <circle cx="12" cy="13" r="3.5"/>
-          </svg>
+          <AppLogo type="CAMERA" :size="80" />
         </button>
         
         <div
