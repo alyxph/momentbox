@@ -72,7 +72,17 @@ const emit = defineEmits(['start', 'settings']);
         border: 6px solid #000; box-shadow: 16px 16px 0 #000; width: 90vw; max-width: 1000px; aspect-ratio: 16 / 9;
         display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;"
     >
-        <AppLogo type="MAIN" :size="300" style="filter: drop-shadow(8px 8px 0 #000);" />
+      <!-- Logo and Title -->
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 16px; margin-bottom: 8px;">
+        <AppLogo type="CAMERA" :size="100" style="filter: drop-shadow(6px 6px 0 #000);" />
+        <h1
+          style="font-family: 'Bangers', cursive; font-size: clamp(60px, 10vw, 120px);
+            color: #ff4cb0; letter-spacing: 5px; line-height: 1;
+            text-shadow: 6px 6px 0 #000; margin: 0; padding: 0;"
+        >
+          MOMENTBOX
+        </h1>
+      </div>
       
       <!-- Subtitle banner -->
       <div style="margin: 16px 0 32px;">

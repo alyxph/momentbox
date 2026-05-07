@@ -30,5 +30,6 @@ const props = defineProps({
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+  mix-blend-mode: multiply;
 }
 </style>
