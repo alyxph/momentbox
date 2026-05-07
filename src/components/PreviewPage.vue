@@ -145,14 +145,14 @@ async function generateQrCode() {
     formData.append('reqtype', 'fileupload');
     formData.append('time', '12h');
     formData.append('fileToUpload', file);
-    const response = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', {
+    const response = await fetch(import.meta.env.VITE_UPLOAD_API, {
       method: 'POST',
       body: formData
     });
     const imageUrl = await response.text();
     if (imageUrl.startsWith('http')) {
       downloadLink.value = imageUrl;
-      qrUrl.value = `https://api.qrserver.com/v1/create-qr-code/?size=450x450&data=${encodeURIComponent(imageUrl)}`;
+      qrUrl.value = `${import.meta.env.VITE_QR_API}?size=450x450&data=${encodeURIComponent(imageUrl)}`;
     } else {
       throw new Error('Upload failed');
     }
