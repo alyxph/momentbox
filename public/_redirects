@@ -1,0 +1,2 @@
+/api/upload  https://litterbox.catbox.moe/resources/internals/api.php  200
+/api/qr      https://api.qrserver.com/v1/create-qr-code/           200
