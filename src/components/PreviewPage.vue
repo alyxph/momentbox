@@ -32,36 +32,44 @@ function drawStrip() {
   const baseW = isDefault ? 600 : (layout.frame?.width || 1200);
   const baseH = isDefault ? 1800 : (layout.frame?.height || 1800);
 
-  canvas.width = baseW;
+  // We'll render two strips side-by-side: left = original order, right = shuffled order
+  const spacing = 0; // no gap between strips
+  canvas.width = baseW * 2 + spacing;
   canvas.height = baseH;
-  ctx.clearRect(0, 0, baseW, baseH);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  if (isDefault) {
-    // --- DRAW DEFAULT THEME (5x15 cm) ---
+  const normalPhotos = [...props.photos];
+  const rightOrder = [1, 3, 0, 2]; // 2-4-1-3
+  const shuffledPhotos = rightOrder
+    .map((idx) => normalPhotos[idx])
+    .filter((src) => !!src);
+
+  const drawDefaultStrip = (photoArray, xOffset) => {
     const cfg = frameConfigs[layout.id];
     ctx.fillStyle = cfg.bg;
-    ctx.fillRect(0, 0, baseW, baseH);
+    ctx.fillRect(xOffset, 0, baseW, baseH);
 
     ctx.fillStyle = cfg.headerBg;
-    ctx.fillRect(0, 0, baseW, 200);
+    ctx.fillRect(xOffset, 0, baseW, 200);
     ctx.fillStyle = cfg.headerText;
-    ctx.font = 'bold 50px Bangers'; // Ukuran font disesuaikan karena lebih ramping
+    ctx.font = 'bold 50px Bangers';
     ctx.textAlign = 'center';
-    ctx.fillText(`✦ ${layout.name} ✦`, baseW / 2, 125);
+    ctx.fillText(`✦ ${layout.name} ✦`, xOffset + baseW / 2, 125);
 
     ctx.fillStyle = cfg.footerBg;
-    ctx.fillRect(0, baseH - 100, baseW, 100);
+    ctx.fillRect(xOffset, baseH - 100, baseW, 100);
 
     ctx.strokeStyle = cfg.border;
-    ctx.lineWidth = 20; // Border lebih tipis agar proporsional
-    ctx.strokeRect(10, 10, baseW - 20, baseH - 20);
+    ctx.lineWidth = 20;
+    ctx.strokeRect(xOffset + 10, 10, baseW - 20, baseH - 20);
 
-    const pw = baseW - 80; // Margin kiri-kanan lebih kecil
+    const pw = baseW - 80;
     const ph = (baseH - 420) / 4;
     const startY = 240;
     const gap = 20;
 
-    props.photos.forEach((src, idx) => {
+    photoArray.forEach((src, idx) => {
+      if (!src) return;
       const img = new Image();
       img.onload = () => {
         const y = startY + idx * (ph + gap);
@@ -73,47 +81,59 @@ function drawStrip() {
         } else {
           sw = iw; sh = iw / aspect; sx = 0; sy = (ih - sh) / 2;
         }
-        ctx.drawImage(img, sx, sy, sw, sh, 40, y, pw, ph);
+        ctx.drawImage(img, sx, sy, sw, sh, xOffset + 40, y, pw, ph);
         ctx.strokeStyle = '#000';
         ctx.lineWidth = 4;
-        ctx.strokeRect(40, y, pw, ph);
+        ctx.strokeRect(xOffset + 40, y, pw, ph);
       };
       img.src = src;
     });
+  };
+
+  const drawCustomStrip = (photoArray, xOffset, frameImg) => {
+    const order = layout.layerOrder || ['box-1', 'box-2', 'box-3', 'box-4', 'frame'];
+    order.forEach((layerId) => {
+      if (layerId === 'frame') {
+        if (frameImg && frameImg.complete) {
+          ctx.drawImage(frameImg, xOffset, 0, baseW, baseH);
+        }
+        return;
+      }
+
+      const boxId = parseInt(layerId.split('-')[1], 10);
+      const box = layout.boxes.find(b => b.id === boxId);
+      const src = photoArray[boxId - 1];
+      if (!box || !src) return;
+
+      const img = new Image();
+      img.onload = () => {
+        const iw = img.width, ih = img.height;
+        const aspect = box.width / box.height;
+        let sw, sh, sx, sy;
+        if (iw / ih > aspect) {
+          sh = ih; sw = ih * aspect; sx = (iw - sw) / 2; sy = 0;
+        } else {
+          sw = iw; sh = iw / aspect; sx = 0; sy = (ih - sh) / 2;
+        }
+        ctx.drawImage(img, sx, sy, sw, sh, xOffset + box.x, box.y, box.width, box.height);
+        if (frameImg && order.indexOf('frame') > order.indexOf(layerId) && frameImg.complete) {
+          ctx.drawImage(frameImg, xOffset, 0, baseW, baseH);
+        }
+      };
+      img.src = src;
+    });
+  };
+
+  if (isDefault) {
+    drawDefaultStrip(normalPhotos, 0);
+    drawDefaultStrip(shuffledPhotos, baseW + spacing);
   } else {
     // --- DRAW CUSTOM LAYOUT ---
     const frameImg = new Image();
     frameImg.crossOrigin = 'anonymous';
     const drawAll = () => {
-      ctx.clearRect(0, 0, baseW, baseH);
-      const order = layout.layerOrder || ['box-1', 'box-2', 'box-3', 'box-4', 'frame'];
-      order.forEach((layerId) => {
-        if (layerId === 'frame') {
-          if (frameImg.complete) ctx.drawImage(frameImg, 0, 0, baseW, baseH);
-        } else {
-          const boxId = parseInt(layerId.split('-')[1]);
-          const box = layout.boxes.find(b => b.id === boxId);
-          const src = props.photos[boxId - 1];
-          if (box && src) {
-            const img = new Image();
-            img.onload = () => {
-              const iw = img.width, ih = img.height;
-              const aspect = box.width / box.height;
-              let sw, sh, sx, sy;
-              if (iw / ih > aspect) {
-                sh = ih; sw = ih * aspect; sx = (iw - sw) / 2; sy = 0;
-              } else {
-                sw = iw; sh = iw / aspect; sx = 0; sy = (ih - sh) / 2;
-              }
-              ctx.drawImage(img, sx, sy, sw, sh, box.x, box.y, box.width, box.height);
-              if (order.indexOf('frame') > order.indexOf(layerId) && frameImg.complete) {
-                ctx.drawImage(frameImg, 0, 0, baseW, baseH);
-              }
-            };
-            img.src = src;
-          }
-        }
-      });
+      drawCustomStrip(normalPhotos, 0, frameImg);
+      drawCustomStrip(shuffledPhotos, baseW + spacing, frameImg);
     };
     if (layout.frameUrl) {
       frameImg.onload = drawAll;

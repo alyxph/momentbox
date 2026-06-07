@@ -1,14 +1,19 @@
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { frameConfigs } from '../data/frames';
 
 const props = defineProps({
   photos: {
     type: Array,
     required: true,
   },
+  selectedFrame: {
+    type: Object,
+    default: null,
+  },
 });
 
-const emit = defineEmits(['update:photos', 'done', 'go-home']);
+const emit = defineEmits(['update:photos', 'done', 'go-home', 'change-frame']);
 
 const photosList = computed({
   get: () => props.photos,
@@ -25,9 +30,72 @@ const cameraError = ref('');
 const videoEl = ref(null);
 const captureCanvas = ref(null);
 const streamActive = ref(false);
+const framePreviewRef = ref(null);
+const frameName = computed(() => (props.selectedFrame ? props.selectedFrame.name : 'PILIH FRAME'));
+const hasFrame = computed(() => !!props.selectedFrame);
+const isComplete = computed(() => photosList.value.length >= 4 && !isCapturing.value);
+const previewBase = computed(() => {
+  const layout = props.selectedFrame;
+  if (!layout) {
+    return { isDefault: true, baseW: 600, baseH: 1800 };
+  }
+  const isDefault = !!frameConfigs[layout.id];
+  const baseW = isDefault ? 600 : (layout.frame?.width || 1200);
+  const baseH = isDefault ? 1800 : (layout.frame?.height || 1800);
+  return { isDefault, baseW, baseH };
+});
+const previewAspect = computed(() => `${previewBase.value.baseW} / ${previewBase.value.baseH}`);
+const previewBoxes = computed(() => {
+  const layout = props.selectedFrame;
+  if (!layout) return [];
+  const { isDefault, baseW, baseH } = previewBase.value;
+
+  if (isDefault) {
+    const pw = baseW - 80;
+    const ph = (baseH - 420) / 4;
+    const startY = 240;
+    const gap = 20;
+    return Array.from({ length: 4 }, (_, idx) => ({
+      id: idx + 1,
+      x: 40,
+      y: startY + idx * (ph + gap),
+      width: pw,
+      height: ph,
+    }));
+  }
+
+  if (!layout.boxes) return [];
+  return [...layout.boxes]
+    .map(box => ({
+      id: box.id,
+      x: box.x,
+      y: box.y,
+      width: box.width,
+      height: box.height,
+    }))
+    .sort((a, b) => a.id - b.id);
+});
 
 let stream = null;
 let seqTimer = null;
+let drawSeq = 0;
+
+function clearTimers() {
+  if (seqTimer) {
+    clearTimeout(seqTimer);
+    seqTimer = null;
+  }
+}
+
+function retakeBoxStyle(box) {
+  const { baseW, baseH } = previewBase.value;
+  return {
+    left: `${(box.x / baseW) * 100}%`,
+    top: `${(box.y / baseH) * 100}%`,
+    width: `${(box.width / baseW) * 100}%`,
+    height: `${(box.height / baseH) * 100}%`,
+  };
+}
 
 async function startCamera() {
   cameraError.value = '';
@@ -55,10 +123,7 @@ function stopCamera() {
   }
   stream = null;
   streamActive.value = false;
-  if (seqTimer) {
-    clearTimeout(seqTimer);
-    seqTimer = null;
-  }
+  clearTimers();
 }
 
 function resetState() {
@@ -83,7 +148,7 @@ function goHome() {
   emit('go-home');
 }
 
-function capturePhoto() {
+function capturePhoto(targetIndex = null) {
   const video = videoEl.value;
   const canvas = captureCanvas.value;
   if (!video || !canvas) return;
@@ -101,7 +166,13 @@ function capturePhoto() {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 
   const nextPhoto = canvas.toDataURL('image/jpeg', 1.0);
-  photosList.value = [...photosList.value, nextPhoto];
+  if (targetIndex === null) {
+    photosList.value = [...photosList.value, nextPhoto];
+  } else {
+    const updated = [...photosList.value];
+    updated[targetIndex] = nextPhoto;
+    photosList.value = updated;
+  }
 
   showFlash.value = true;
   setTimeout(() => {
@@ -127,11 +198,9 @@ function captureNext() {
   const idx = photosList.value.length;
   if (idx >= 4) {
     isCapturing.value = false;
-    statusText.value = '✅ Semua foto berhasil! Pilih frame...';
+    statusText.value = '✅ Semua foto berhasil! Klik foto di kanan untuk retake, atau lanjut.';
+    showSmile.value = false;
     stopCamera();
-    seqTimer = setTimeout(() => {
-      emit('done');
-    }, 900);
     return;
   }
 
@@ -154,12 +223,203 @@ function captureNext() {
   });
 }
 
-function startCapture() {
+async function startCapture() {
   if (isCapturing.value || cameraError.value) return;
+  clearTimers();
+  if (!streamActive.value) {
+    await startCamera();
+    if (!streamActive.value) return;
+  }
   isCapturing.value = true;
   photosList.value = [];
   statusText.value = 'Siap-siap...';
   captureNext();
+}
+
+async function retakePhoto(index) {
+  if (isCapturing.value || cameraError.value) return;
+  if (!photosList.value[index]) return;
+  clearTimers();
+  if (!streamActive.value) {
+    await startCamera();
+    if (!streamActive.value) {
+      isCapturing.value = false;
+      return;
+    }
+  }
+  isCapturing.value = true;
+  showSmile.value = false;
+  statusText.value = `Retake foto ${index + 1}...`;
+
+  runCountdown(3, () => {
+    showSmile.value = true;
+    statusText.value = 'Tahan senyum... 😄';
+    seqTimer = setTimeout(() => {
+      capturePhoto(index);
+      statusText.value = `Foto ${index + 1} diganti! 🎉`;
+
+      seqTimer = setTimeout(() => {
+        showSmile.value = false;
+        isCapturing.value = false;
+        stopCamera();
+      }, 800);
+    }, 1200);
+  });
+}
+
+function goPreview() {
+  if (photosList.value.length < 4) {
+    statusText.value = 'Ambil 4 foto dulu sebelum lanjut ke preview.';
+    return;
+  }
+  stopCamera();
+  emit('done');
+}
+
+function drawFramePreview() {
+  const canvas = framePreviewRef.value;
+  const layout = props.selectedFrame;
+  if (!canvas || !layout) return;
+
+  const { isDefault, baseW, baseH } = previewBase.value;
+  const targetW = 220;
+  const scale = targetW / baseW;
+  const targetH = Math.round(baseH * scale);
+
+  canvas.width = targetW;
+  canvas.height = targetH;
+
+  const ctx = canvas.getContext('2d');
+  const seq = ++drawSeq;
+
+  const applyScale = () => {
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  };
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, targetW, targetH);
+  applyScale();
+
+  const photosSnapshot = [...props.photos];
+
+  if (isDefault) {
+    const cfg = frameConfigs[layout.id];
+    ctx.fillStyle = cfg.bg;
+    ctx.fillRect(0, 0, baseW, baseH);
+
+    ctx.fillStyle = cfg.headerBg;
+    ctx.fillRect(0, 0, baseW, 200);
+    ctx.fillStyle = cfg.headerText;
+    ctx.font = 'bold 50px Bangers';
+    ctx.textAlign = 'center';
+    ctx.fillText(`✦ ${layout.name} ✦`, baseW / 2, 125);
+
+    ctx.fillStyle = cfg.footerBg;
+    ctx.fillRect(0, baseH - 100, baseW, 100);
+
+    ctx.strokeStyle = cfg.border;
+    ctx.lineWidth = 20;
+    ctx.strokeRect(10, 10, baseW - 20, baseH - 20);
+
+    const pw = baseW - 80;
+    const ph = (baseH - 420) / 4;
+    const startY = 240;
+    const gap = 20;
+
+    photosSnapshot.forEach((src, idx) => {
+      if (!src) return;
+      const img = new Image();
+      img.onload = () => {
+        if (seq !== drawSeq) return;
+        applyScale();
+        const y = startY + idx * (ph + gap);
+        const iw = img.width;
+        const ih = img.height;
+        const aspect = pw / ph;
+        let sw;
+        let sh;
+        let sx;
+        let sy;
+        if (iw / ih > aspect) {
+          sh = ih;
+          sw = ih * aspect;
+          sx = (iw - sw) / 2;
+          sy = 0;
+        } else {
+          sw = iw;
+          sh = iw / aspect;
+          sx = 0;
+          sy = (ih - sh) / 2;
+        }
+        ctx.drawImage(img, sx, sy, sw, sh, 40, y, pw, ph);
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(40, y, pw, ph);
+      };
+      img.src = src;
+    });
+    return;
+  }
+
+  const frameImg = new Image();
+  frameImg.crossOrigin = 'anonymous';
+
+  const drawAll = () => {
+    if (seq !== drawSeq) return;
+    applyScale();
+    ctx.clearRect(0, 0, baseW, baseH);
+
+    const order = layout.layerOrder || ['box-1', 'box-2', 'box-3', 'box-4', 'frame'];
+    order.forEach((layerId) => {
+      if (layerId === 'frame') {
+        if (frameImg.complete && layout.frameUrl) {
+          ctx.drawImage(frameImg, 0, 0, baseW, baseH);
+        }
+        return;
+      }
+
+      const boxId = parseInt(layerId.split('-')[1], 10);
+      const box = layout.boxes?.find(b => b.id === boxId);
+      const src = photosSnapshot[boxId - 1];
+      if (!box || !src) return;
+
+      const img = new Image();
+      img.onload = () => {
+        if (seq !== drawSeq) return;
+        applyScale();
+        const iw = img.width;
+        const ih = img.height;
+        const aspect = box.width / box.height;
+        let sw;
+        let sh;
+        let sx;
+        let sy;
+        if (iw / ih > aspect) {
+          sh = ih;
+          sw = ih * aspect;
+          sx = (iw - sw) / 2;
+          sy = 0;
+        } else {
+          sw = iw;
+          sh = iw / aspect;
+          sx = 0;
+          sy = (ih - sh) / 2;
+        }
+        ctx.drawImage(img, sx, sy, sw, sh, box.x, box.y, box.width, box.height);
+        if (order.indexOf('frame') > order.indexOf(layerId) && frameImg.complete) {
+          ctx.drawImage(frameImg, 0, 0, baseW, baseH);
+        }
+      };
+      img.src = src;
+    });
+  };
+
+  if (layout.frameUrl) {
+    frameImg.onload = drawAll;
+    frameImg.src = layout.frameUrl;
+  } else {
+    drawAll();
+  }
 }
 
 onMounted(() => {
@@ -169,6 +429,16 @@ onMounted(() => {
 onUnmounted(() => {
   stopCamera();
 });
+
+watch(
+  [() => props.selectedFrame, () => props.photos],
+  () => {
+    nextTick(() => {
+      drawFramePreview();
+    });
+  },
+  { deep: true, immediate: true }
+);
 </script>
 
 <template>
@@ -179,7 +449,7 @@ onUnmounted(() => {
       style="position: absolute; top: 24px; left: 24px; width: 64px; height: 64px; background: #ff4cb0;
         border: 4px solid #000; box-shadow: 6px 6px 0 #000; border-radius: 0;
         display: flex; align-items: center; justify-content: center; z-index: 50; cursor: pointer;"
-      @click="goHome"
+      @click="emit('change-frame')"
     >
       <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
         <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -189,7 +459,7 @@ onUnmounted(() => {
     <!-- Left: Video + Status -->
     <div class="camera-left">
       <!-- Title -->
-      <div class="slide-up" style="text-align: center;">
+      <div class="slide-up" style="text-align: center; margin-bottom: 18px;">
         <h2
           class="neo-title"
           style="font-size: clamp(24px, 4vw, 40px); background: #ff4cb0; border: 4px solid #000;
@@ -197,9 +467,6 @@ onUnmounted(() => {
         >
           FOTO {{ Math.min(photosList.length + 1, 4) }} / 4
         </h2>
-        <p class="neo-chip" style="font-size: 12px; margin-top: 8px; letter-spacing: 1px; font-weight: 800;">
-          {{ statusText }}
-        </p>
       </div>
 
       <!-- Main Area: Video + Overlay Button -->
@@ -269,6 +536,25 @@ onUnmounted(() => {
               </span>
             </div>
 
+            <!-- Finish overlay -->
+            <div v-if="isComplete" class="camera-finish-overlay">
+              <div class="neo-block finish-popup" style="text-align: center;">
+                <div class="neo-title finish-title" style="margin-bottom: 12px;">
+                  Foto Anda sudah siap!
+                </div>
+                <p class="finish-text" style="margin: 0 auto; max-width: 680px;">
+                  Ingin mengganti salah satu foto? Cukup klik foto yang ingin diubah pada pratinjau di sebelah kanan. Jika sudah sesuai, tekan Next untuk melanjutkan.
+                </p>
+                <button
+                  class="btn-3d neo-btn finish-next"
+                  :disabled="isCapturing"
+                  @click="goPreview"
+                >
+                  NEXT
+                </button>
+              </div>
+            </div>
+
 
           </div>
 
@@ -314,32 +600,39 @@ onUnmounted(() => {
         style="font-size: 16px; letter-spacing: 2px; text-align: center; background: #ffd400;
           border: 3px solid #000; padding: 6px 10px; box-shadow: 4px 4px 0 #000;"
       >
-        PREVIEW
+        PREVIEW FRAME
       </h3>
       <div class="preview-strip">
+        <div v-if="!hasFrame" style="width: 100%; padding: 16px; text-align: center; font-weight: 800;">
+          PILIH FRAME DULU
+        </div>
         <div
-          v-for="n in 4"
-          :key="n"
-          style="width: 100%; aspect-ratio: 4 / 3; background: #f4f4f4; border: 3px solid #000;
-            overflow: hidden; position: relative; margin-bottom: 6px;"
+          v-else
+          class="frame-preview"
+          :style="{ aspectRatio: previewAspect }"
         >
-          <img v-if="photosList[n - 1]" :src="photosList[n - 1]" style="width: 100%; height: 100%; object-fit: cover;" />
-          <div v-else style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
-            <span style="color: #333; font-size: 18px;">📷</span>
-          </div>
-          <!-- Badge -->
-          <div
-            :style="`position:absolute;top:2px;left:2px;width:18px;height:18px;
-              background:${photosList[n - 1] ? '#00E5FF' : '#111'};
-              display:flex;align-items:center;justify-content:center;border:2px solid #000;`"
-          >
-            <span style="color: white; font-size: 9px; font-weight: 900;">{{ n }}</span>
-          </div>
+          <canvas ref="framePreviewRef" style="width: 100%; height: 100%; display: block;"></canvas>
+          <template v-if="isComplete">
+            <button
+              v-for="box in previewBoxes"
+              :key="`retake-area-${box.id}`"
+              class="retake-hotspot"
+              :style="retakeBoxStyle(box)"
+              :disabled="isCapturing || !photosList[box.id - 1]"
+              :aria-label="`Retake foto ${box.id}`"
+              @click="retakePhoto(box.id - 1)"
+            >
+              <span class="retake-badge">{{ box.id }}</span>
+            </button>
+          </template>
         </div>
       </div>
       <p style="color: #111; font-size: 10px; letter-spacing: 1px; text-align: center; font-weight: 800;">
-        4 STRIP LAYOUT
+        FRAME: {{ frameName }}
       </p>
+      <!-- instruction moved to popup; inline hint removed -->
+
+      <!-- 'Next' is available in the popup; panel button removed to avoid duplication -->
     </div>
 
     <!-- Camera permission error overlay -->
@@ -387,3 +680,82 @@ onUnmounted(() => {
     <canvas ref="captureCanvas" style="display: none;"></canvas>
   </div>
 </template>
+
+<style scoped>
+.camera-finish-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 5;
+}
+
+.finish-popup {
+  padding: 28px 30px;
+  max-width: 820px;
+  width: 95%;
+}
+
+.finish-title {
+  font-size: 34px;
+}
+
+.finish-text {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  margin-top: 6px;
+}
+
+.finish-next {
+  margin-top: 18px;
+  background: #00e5ff;
+  color: #000;
+  font-size: 20px;
+  padding: 18px 28px;
+  border-radius: 8px;
+  box-shadow: 8px 8px 0 #000;
+  width: 220px;
+}
+
+.frame-preview {
+  position: relative;
+  width: 100%;
+}
+
+.retake-hotspot {
+  position: absolute;
+  border: 2px dashed rgba(0, 0, 0, 0.6);
+  background: rgba(255, 255, 255, 0);
+  cursor: pointer;
+  padding: 0;
+}
+
+.retake-hotspot:not(:disabled):hover {
+  background: rgba(255, 76, 176, 0.12);
+}
+
+.retake-hotspot:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.retake-badge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  background: #ff4cb0;
+  color: #000;
+  border: 2px solid #000;
+  font-size: 10px;
+  font-weight: 900;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+</style>

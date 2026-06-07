@@ -12,6 +12,7 @@ const photos = ref([]);
 const selectedFrame = ref(null);
 const cameraKey = ref(0);
 const customLayouts = ref([]);
+const frameNextPage = ref('camera');
 
 // Load custom layouts from localStorage
 const saved = localStorage.getItem('photobooth_custom_layouts');
@@ -25,7 +26,6 @@ if (saved) {
 
 function goToCamera() {
   photos.value = [];
-  selectedFrame.value = null;
   page.value = 'camera';
   cameraKey.value += 1;
 }
@@ -36,17 +36,41 @@ function goHome() {
   selectedFrame.value = null;
 }
 
-function openFrames() {
+function startFlow() {
+  photos.value = [];
+  selectedFrame.value = null;
+  frameNextPage.value = 'camera';
+  page.value = 'frames';
+}
+
+function openFrames(nextPage = 'preview') {
+  frameNextPage.value = nextPage;
   page.value = 'frames';
 }
 
 function selectFrame(frame) {
   selectedFrame.value = frame;
+  if (frameNextPage.value === 'camera') {
+    photos.value = [];
+    cameraKey.value += 1;
+  }
+  page.value = frameNextPage.value;
+}
+
+function goToPreview() {
+  if (!selectedFrame.value) {
+    openFrames('preview');
+    return;
+  }
   page.value = 'preview';
 }
 
 function retakePhotos() {
   goToCamera();
+}
+
+function changeFrame() {
+  openFrames('preview');
 }
 
 function openSettings() {
@@ -72,7 +96,7 @@ function deleteLayout(id) {
 
 <template>
   <div class="app-root">
-    <HomePage v-if="page === 'home'" @start="goToCamera" @settings="openSettings" />
+    <HomePage v-if="page === 'home'" @start="startFlow" @settings="openSettings" />
 
     <SettingsPage
       v-else-if="page === 'settings'"
@@ -84,9 +108,11 @@ function deleteLayout(id) {
     <CameraPage
       v-else-if="page === 'camera'"
       :key="cameraKey"
+      :selected-frame="selectedFrame"
       v-model:photos="photos"
-      @done="openFrames"
+      @done="goToPreview"
       @go-home="goHome"
+      @change-frame="() => openFrames('camera')"
     />
 
     <FramesPage
@@ -102,7 +128,7 @@ function deleteLayout(id) {
       v-else-if="page === 'preview'"
       :selected-frame="selectedFrame"
       :photos="photos"
-      @change-frame="openFrames"
+      @change-frame="changeFrame"
       @retake="retakePhotos"
       @go-home="goHome"
     />

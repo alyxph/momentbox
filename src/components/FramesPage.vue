@@ -41,20 +41,9 @@ const emit = defineEmits(['select', 'go-home']);
     <!-- Header -->
     <div
       style="background: #ff4cb0; padding: 14px 20px; border-bottom: 5px solid #000;
-        display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0;
+        display: flex; align-items: center; justify-content: flex-start; gap: 16px; position: sticky; top: 0;
         z-index: 20; box-shadow: 0 4px 0 #000;"
     >
-      <div>
-        <h2
-          style="font-family: 'Bangers', cursive; font-size: 28px; color: white; letter-spacing: 2px;
-            text-shadow: 2px 2px 0 #000;"
-        >
-          🎨 PILIH FRAME TEMA
-        </h2>
-        <p style="color: #ffe0f0; font-size: 11px; font-weight: 700; letter-spacing: 2px;">
-          TENTUKAN TAMPILAN FOTO STRIP KAMU
-        </p>
-      </div>
       <button
         class="btn-3d"
         style="background: #000; color: white; border: 4px solid #000; width: 44px; height: 44px; font-size: 20px;
@@ -64,6 +53,18 @@ const emit = defineEmits(['select', 'go-home']);
       >
         ✕
       </button>
+
+      <div>
+        <h2
+          style="font-family: 'Bangers', cursive; font-size: 28px; color: white; letter-spacing: 2px;
+            text-shadow: 2px 2px 0 #000; margin: 0;"
+        >
+          🎨 PILIH FRAME TEMA
+        </h2>
+        <p style="color: #ffe0f0; font-size: 11px; font-weight: 700; letter-spacing: 2px; margin: 0;">
+          TENTUKAN TAMPILAN FOTO STRIP KAMU
+        </p>
+      </div>
     </div>
 
     <!-- Grid -->
