@@ -7,17 +7,35 @@ const props = defineProps({
     type: Array,
     required: true,
   },
+  gifs: {
+    type: Array,
+    required: true,
+  },
+  capturedFrames: {
+    type: Array,
+    required: true,
+  },
   selectedFrame: {
     type: Object,
     default: null,
   },
 });
 
-const emit = defineEmits(['update:photos', 'done', 'go-home', 'change-frame']);
+const emit = defineEmits(['update:photos', 'update:gifs', 'update:capturedFrames', 'done', 'go-home', 'change-frame']);
 
 const photosList = computed({
   get: () => props.photos,
   set: (val) => emit('update:photos', val),
+});
+
+const gifsList = computed({
+  get: () => props.gifs,
+  set: (val) => emit('update:gifs', val),
+});
+
+const capturedFramesList = computed({
+  get: () => props.capturedFrames,
+  set: (val) => emit('update:capturedFrames', val),
 });
 
 const countdown = ref(0);
@@ -79,11 +97,16 @@ const previewBoxes = computed(() => {
 let stream = null;
 let seqTimer = null;
 let drawSeq = 0;
+let gifRecordInterval = null;
 
 function clearTimers() {
   if (seqTimer) {
     clearTimeout(seqTimer);
     seqTimer = null;
+  }
+  if (gifRecordInterval) {
+    clearInterval(gifRecordInterval);
+    gifRecordInterval = null;
   }
 }
 
@@ -134,6 +157,8 @@ function resetState() {
   statusText.value = 'Tekan MULAI FOTO untuk memulai mengambil foto';
   cameraError.value = '';
   photosList.value = [];
+  gifsList.value = [];
+  capturedFramesList.value = [];
 }
 
 async function retryCamera() {
@@ -146,6 +171,83 @@ async function retryCamera() {
 function goHome() {
   stopCamera();
   emit('go-home');
+}
+
+function captureGifFrame() {
+  const video = videoEl.value;
+  if (!video) return null;
+
+  const canvas = document.createElement('canvas');
+  const vw = video.videoWidth || 640;
+  const vh = video.videoHeight || 480;
+
+  // Downscale size (width 400px, adjust height according to aspect ratio)
+  const targetW = 400;
+  const targetH = Math.round((vh / vw) * targetW);
+
+  canvas.width = targetW;
+  canvas.height = targetH;
+
+  const ctx = canvas.getContext('2d');
+  // Mirroring
+  ctx.translate(targetW, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, 0, 0, targetW, targetH);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+  return canvas.toDataURL('image/jpeg', 0.8);
+}
+
+function generateGifForIndex(index, frameArray) {
+  if (!frameArray || frameArray.length === 0) return;
+
+  // Save the raw captured frames array for composite strip compilation
+  const updatedFrames = [...capturedFramesList.value];
+  updatedFrames[index] = frameArray;
+  capturedFramesList.value = updatedFrames;
+
+  // Mark status as loading for this GIF
+  const updatedGifs = [...gifsList.value];
+  updatedGifs[index] = 'loading';
+  gifsList.value = updatedGifs;
+
+  // Use Yahoo's gifshot from window.gifshot
+  const gifshotLib = window.gifshot;
+  if (!gifshotLib) {
+    console.error('gifshot library not loaded');
+    const fallbackGifs = [...gifsList.value];
+    fallbackGifs[index] = frameArray[frameArray.length - 1]; // fallback to last frame
+    gifsList.value = fallbackGifs;
+    return;
+  }
+
+  const img = new Image();
+  img.onload = () => {
+    const targetW = 400;
+    const targetH = img.naturalWidth ? Math.round((img.naturalHeight / img.naturalWidth) * targetW) : 300;
+
+    gifshotLib.createGIF({
+      images: frameArray,
+      gifWidth: targetW,
+      gifHeight: targetH,
+      interval: 0.1, // 10 fps (100ms per frame)
+      numFrames: frameArray.length,
+      frameDuration: 1,
+      sampleInterval: 10,
+    }, (obj) => {
+      if (!obj.error) {
+        const updated = [...gifsList.value];
+        updated[index] = obj.image; // base64 gif
+        gifsList.value = updated;
+      } else {
+        console.error('Failed to create GIF:', obj.error);
+        const fallback = [...gifsList.value];
+        fallback[index] = frameArray[frameArray.length - 1]; // fallback to last frame
+        gifsList.value = fallback;
+      }
+    });
+  };
+  img.src = frameArray[0];
 }
 
 function capturePhoto(targetIndex = null) {
@@ -210,16 +312,34 @@ function captureNext() {
     showSmile.value = true;
     statusText.value = `Tahan senyum... 😄`;
     
-    // Jeda 1.2 detik agar pengguna sempat tersenyum setelah melihat tulisan SENYUM!
+    // Start recording frames
+    const recordedFrames = [];
+    const initialFrame = captureGifFrame();
+    if (initialFrame) recordedFrames.push(initialFrame);
+    
+    gifRecordInterval = setInterval(() => {
+      const frame = captureGifFrame();
+      if (frame) {
+        recordedFrames.push(frame);
+      }
+    }, 100);
+    
+    // Jeda 2.0 detik agar pengguna sempat tersenyum setelah melihat tulisan SENYUM!
     seqTimer = setTimeout(() => {
+      if (gifRecordInterval) {
+        clearInterval(gifRecordInterval);
+        gifRecordInterval = null;
+      }
       capturePhoto();
       statusText.value = `Foto ${idx + 1} diambil! 🎉`;
+      
+      generateGifForIndex(idx, recordedFrames);
       
       seqTimer = setTimeout(() => {
         showSmile.value = false;
         captureNext();
       }, 800);
-    }, 1200);
+    }, 2000);
   });
 }
 
@@ -254,16 +374,35 @@ async function retakePhoto(index) {
   runCountdown(3, () => {
     showSmile.value = true;
     statusText.value = 'Tahan senyum... 😄';
+    
+    // Start recording frames
+    const recordedFrames = [];
+    const initialFrame = captureGifFrame();
+    if (initialFrame) recordedFrames.push(initialFrame);
+    
+    gifRecordInterval = setInterval(() => {
+      const frame = captureGifFrame();
+      if (frame) {
+        recordedFrames.push(frame);
+      }
+    }, 100);
+    
     seqTimer = setTimeout(() => {
+      if (gifRecordInterval) {
+        clearInterval(gifRecordInterval);
+        gifRecordInterval = null;
+      }
       capturePhoto(index);
       statusText.value = `Foto ${index + 1} diganti! 🎉`;
+
+      generateGifForIndex(index, recordedFrames);
 
       seqTimer = setTimeout(() => {
         showSmile.value = false;
         isCapturing.value = false;
         stopCamera();
       }, 800);
-    }, 1200);
+    }, 2000);
   });
 }
 

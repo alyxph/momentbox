@@ -1,6 +1,6 @@
 <script setup>
-import { onMounted, ref } from 'vue';
-import { frameConfigs } from '../data/frames';
+import { onMounted, onUnmounted, ref, computed, watch, nextTick } from 'vue'
+import { frameConfigs } from '../data/frames'
 
 const props = defineProps({
   selectedFrame: {
@@ -11,218 +11,1332 @@ const props = defineProps({
     type: Array,
     required: true,
   },
-});
+  gifs: {
+    type: Array,
+    required: true,
+  },
+  capturedFrames: {
+    type: Array,
+    required: true,
+  },
+})
 
-const emit = defineEmits(['change-frame', 'retake', 'go-home']);
+const emit = defineEmits(['change-frame', 'retake', 'go-home'])
 
-const canvasRef = ref(null);
-const isUploading = ref(false);
-const qrUrl = ref('');
-const downloadLink = ref('');
-const showQrModal = ref(false);
+const canvasRef = ref(null)
+const isUploading = ref(false)
+const uploadProgressText = ref('')
+const qrUrl = ref('')
+const downloadLink = ref('')
+const showQrModal = ref(false)
+const uploadedPhotoUrlCache = ref('')
+const uploadedGifUrlCache = ref('')
+const uploadedHtmlUrlCache = ref('')
+const isBackgroundUploading = ref(false)
+const activeTab = ref('photo') // 'photo' or 'gif'
+const isCombinedGenerating = ref(false)
+const combinedGifUrl = ref('')
+const isCompositeGenerating = ref(false)
+const compositeGifUrl = ref('')
+const isGifDownloadClicked = ref(false)
+const canvasWidth = ref(0)
+const canvasHeight = ref(0)
+
+function updateCanvasSize() {
+  const canvas = canvasRef.value
+  if (canvas) {
+    canvasWidth.value = canvas.clientWidth
+    canvasHeight.value = canvas.clientHeight
+  }
+}
+
+watch(activeTab, () => {
+  nextTick(updateCanvasSize)
+})
 
 function drawStrip() {
-  const canvas = canvasRef.value;
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
+  return new Promise((resolve) => {
+    const canvas = canvasRef.value
+    if (!canvas) return resolve()
+    const ctx = canvas.getContext('2d')
 
-  const layout = props.selectedFrame;
-  const isDefault = !!frameConfigs[layout.id];
-  // 5x15 cm (600x1800px) untuk hasil strip asli
-  const baseW = isDefault ? 600 : (layout.frame?.width || 1200);
-  const baseH = isDefault ? 1800 : (layout.frame?.height || 1800);
+    const layout = props.selectedFrame
+    const isDefault = !!frameConfigs[layout.id]
+    // 5x15 cm (600x1800px) untuk hasil strip asli
+    const baseW = isDefault ? 600 : layout.frame?.width || 1200
+    const baseH = isDefault ? 1800 : layout.frame?.height || 1800
 
-  // We'll render two strips side-by-side: left = original order, right = shuffled order
-  const spacing = 0; // no gap between strips
-  canvas.width = baseW * 2 + spacing;
-  canvas.height = baseH;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // We'll render two strips side-by-side: left = original order, right = shuffled order
+    const spacing = 0 // no gap between strips
+    canvas.width = baseW * 2 + spacing
+    canvas.height = baseH
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-  const normalPhotos = [...props.photos];
-  const rightOrder = [1, 3, 0, 2]; // 2-4-1-3
-  const shuffledPhotos = rightOrder
-    .map((idx) => normalPhotos[idx])
-    .filter((src) => !!src);
+    const normalPhotos = [...props.photos]
+    const rightOrder = [1, 3, 0, 2] // 2-4-1-3
+    const shuffledPhotos = rightOrder.map((idx) => normalPhotos[idx]).filter((src) => !!src)
 
-  const drawDefaultStrip = (photoArray, xOffset) => {
-    const cfg = frameConfigs[layout.id];
-    ctx.fillStyle = cfg.bg;
-    ctx.fillRect(xOffset, 0, baseW, baseH);
+    const drawDefaultStrip = (photoArray, xOffset) => {
+      const cfg = frameConfigs[layout.id]
+      ctx.fillStyle = cfg.bg
+      ctx.fillRect(xOffset, 0, baseW, baseH)
 
-    ctx.fillStyle = cfg.headerBg;
-    ctx.fillRect(xOffset, 0, baseW, 200);
-    ctx.fillStyle = cfg.headerText;
-    ctx.font = 'bold 50px Bangers';
-    ctx.textAlign = 'center';
-    ctx.fillText(`✦ ${layout.name} ✦`, xOffset + baseW / 2, 125);
+      ctx.fillStyle = cfg.headerBg
+      ctx.fillRect(xOffset, 0, baseW, 200)
+      ctx.fillStyle = cfg.headerText
+      ctx.font = 'bold 50px Bangers'
+      ctx.textAlign = 'center'
+      ctx.fillText(`✦ ${layout.name} ✦`, xOffset + baseW / 2, 125)
 
-    ctx.fillStyle = cfg.footerBg;
-    ctx.fillRect(xOffset, baseH - 100, baseW, 100);
+      ctx.fillStyle = cfg.footerBg
+      ctx.fillRect(xOffset, baseH - 100, baseW, 100)
 
-    ctx.strokeStyle = cfg.border;
-    ctx.lineWidth = 20;
-    ctx.strokeRect(xOffset + 10, 10, baseW - 20, baseH - 20);
+      ctx.strokeStyle = cfg.border
+      ctx.lineWidth = 20
+      ctx.strokeRect(xOffset + 10, 10, baseW - 20, baseH - 20)
 
-    const pw = baseW - 80;
-    const ph = (baseH - 420) / 4;
-    const startY = 240;
-    const gap = 20;
+      const pw = baseW - 80
+      const ph = (baseH - 420) / 4
+      const startY = 240
+      const gap = 20
 
-    photoArray.forEach((src, idx) => {
-      if (!src) return;
-      const img = new Image();
-      img.onload = () => {
-        const y = startY + idx * (ph + gap);
-        const iw = img.width, ih = img.height;
-        const aspect = pw / ph;
-        let sw, sh, sx, sy;
-        if (iw / ih > aspect) {
-          sh = ih; sw = ih * aspect; sx = (iw - sw) / 2; sy = 0;
-        } else {
-          sw = iw; sh = iw / aspect; sx = 0; sy = (ih - sh) / 2;
-        }
-        ctx.drawImage(img, sx, sy, sw, sh, xOffset + 40, y, pw, ph);
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 4;
-        ctx.strokeRect(xOffset + 40, y, pw, ph);
-      };
-      img.src = src;
-    });
-  };
-
-  const drawCustomStrip = (photoArray, xOffset, frameImg) => {
-    const order = layout.layerOrder || ['box-1', 'box-2', 'box-3', 'box-4', 'frame'];
-    order.forEach((layerId) => {
-      if (layerId === 'frame') {
-        if (frameImg && frameImg.complete) {
-          ctx.drawImage(frameImg, xOffset, 0, baseW, baseH);
-        }
-        return;
-      }
-
-      const boxId = parseInt(layerId.split('-')[1], 10);
-      const box = layout.boxes.find(b => b.id === boxId);
-      const src = photoArray[boxId - 1];
-      if (!box || !src) return;
-
-      const img = new Image();
-      img.onload = () => {
-        const iw = img.width, ih = img.height;
-        const aspect = box.width / box.height;
-        let sw, sh, sx, sy;
-        if (iw / ih > aspect) {
-          sh = ih; sw = ih * aspect; sx = (iw - sw) / 2; sy = 0;
-        } else {
-          sw = iw; sh = iw / aspect; sx = 0; sy = (ih - sh) / 2;
-        }
-        ctx.drawImage(img, sx, sy, sw, sh, xOffset + box.x, box.y, box.width, box.height);
-        if (frameImg && order.indexOf('frame') > order.indexOf(layerId) && frameImg.complete) {
-          ctx.drawImage(frameImg, xOffset, 0, baseW, baseH);
-        }
-      };
-      img.src = src;
-    });
-  };
-
-  if (isDefault) {
-    drawDefaultStrip(normalPhotos, 0);
-    drawDefaultStrip(shuffledPhotos, baseW + spacing);
-  } else {
-    // --- DRAW CUSTOM LAYOUT ---
-    const frameImg = new Image();
-    frameImg.crossOrigin = 'anonymous';
-    const drawAll = () => {
-      drawCustomStrip(normalPhotos, 0, frameImg);
-      drawCustomStrip(shuffledPhotos, baseW + spacing, frameImg);
-    };
-    if (layout.frameUrl) {
-      frameImg.onload = drawAll;
-      frameImg.src = layout.frameUrl;
-    } else {
-      drawAll();
+      const promises = []
+      photoArray.forEach((src, idx) => {
+        if (!src) return
+        promises.push(new Promise((res) => {
+          const img = new Image()
+          img.onload = () => {
+            const y = startY + idx * (ph + gap)
+            const iw = img.width,
+              ih = img.height
+            const aspect = pw / ph
+            let sw, sh, sx, sy
+            if (iw / ih > aspect) {
+              sh = ih
+              sw = ih * aspect
+              sx = (iw - sw) / 2
+              sy = 0
+            } else {
+              sw = iw
+              sh = iw / aspect
+              sx = 0
+              sy = (ih - sh) / 2
+            }
+            ctx.drawImage(img, sx, sy, sw, sh, xOffset + 40, y, pw, ph)
+            ctx.strokeStyle = '#000'
+            ctx.lineWidth = 4
+            ctx.strokeRect(xOffset + 40, y, pw, ph)
+            res()
+          }
+          img.onerror = res
+          img.src = src
+        }))
+      })
+      return Promise.all(promises)
     }
-  }
+
+    const drawCustomStrip = (photoArray, xOffset, frameImg) => {
+      const order = layout.layerOrder || ['box-1', 'box-2', 'box-3', 'box-4', 'frame']
+      const promises = []
+      order.forEach((layerId) => {
+        if (layerId === 'frame') {
+          if (frameImg && frameImg.complete) {
+            ctx.drawImage(frameImg, xOffset, 0, baseW, baseH)
+          }
+          return
+        }
+
+        const boxId = parseInt(layerId.split('-')[1], 10)
+        const box = layout.boxes.find((b) => b.id === boxId)
+        const src = photoArray[boxId - 1]
+        if (!box || !src) return
+
+        promises.push(new Promise((res) => {
+          const img = new Image()
+          img.onload = () => {
+            const iw = img.width,
+              ih = img.height
+            const aspect = box.width / box.height
+            let sw, sh, sx, sy
+            if (iw / ih > aspect) {
+              sh = ih
+              sw = ih * aspect
+              sx = (iw - sw) / 2
+              sy = 0
+            } else {
+              sw = iw
+              sh = iw / aspect
+              sx = 0
+              sy = (ih - sh) / 2
+            }
+            ctx.drawImage(img, sx, sy, sw, sh, xOffset + box.x, box.y, box.width, box.height)
+            if (frameImg && order.indexOf('frame') > order.indexOf(layerId) && frameImg.complete) {
+              ctx.drawImage(frameImg, xOffset, 0, baseW, baseH)
+            }
+            res()
+          }
+          img.onerror = res
+          img.src = src
+        }))
+      })
+      return Promise.all(promises)
+    }
+
+    if (isDefault) {
+      Promise.all([
+        drawDefaultStrip(normalPhotos, 0),
+        drawDefaultStrip(shuffledPhotos, baseW + spacing)
+      ]).then(() => resolve())
+    } else {
+      // --- DRAW CUSTOM LAYOUT ---
+      const frameImg = new Image()
+      frameImg.crossOrigin = 'anonymous'
+      const drawAll = () => {
+        Promise.all([
+          drawCustomStrip(normalPhotos, 0, frameImg),
+          drawCustomStrip(shuffledPhotos, baseW + spacing, frameImg)
+        ]).then(() => resolve())
+      }
+      if (layout.frameUrl) {
+        frameImg.onload = drawAll
+        frameImg.onerror = () => {
+          drawAll()
+        }
+        frameImg.src = layout.frameUrl
+      } else {
+        drawAll()
+      }
+    }
+  })
 }
 
 function downloadImage() {
-  const canvas = canvasRef.value;
-  const link = document.createElement('a');
-  link.download = `potobox-${Date.now()}.png`;
-  link.href = canvas.toDataURL('image/png');
-  link.click();
+  const canvas = canvasRef.value
+  const link = document.createElement('a')
+  link.download = `potobox-${Date.now()}.png`
+  link.href = canvas.toDataURL('image/png')
+  link.click()
 }
 
-async function generateQrCode() {
-  const canvas = canvasRef.value;
-  if (!canvas) return;
-  isUploading.value = true;
-  showQrModal.value = true;
-  qrUrl.value = '';
-  try {
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
-    const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
-    const formData = new FormData();
-    formData.append('reqtype', 'fileupload');
-    formData.append('time', '12h');
-    formData.append('fileToUpload', file);
-    const response = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData
-    });
-    const imageUrl = await response.text();
-    if (imageUrl.startsWith('http')) {
-      downloadLink.value = imageUrl;
-      qrUrl.value = `/api/qr?size=450x450&data=${encodeURIComponent(imageUrl)}`;
-    } else {
-      throw new Error('Upload failed');
-    }
-  } catch (err) {
-    alert('Gagal mengunggah foto. Pastikan internet stabil.');
-    showQrModal.value = false;
-  } finally {
-    isUploading.value = false;
+async function uploadToLitterbox(file) {
+  const formData = new FormData()
+  formData.append('reqtype', 'fileupload')
+  formData.append('time', '12h')
+  formData.append('fileToUpload', file)
+
+  const res = await fetch('/api/upload', {
+    method: 'POST',
+    body: formData,
+  })
+  const text = await res.text()
+  if (text.startsWith('http')) {
+    return text
+  } else {
+    throw new Error(text || 'Upload failed')
   }
 }
 
+async function startBackgroundUpload() {
+  if (isBackgroundUploading.value || uploadedHtmlUrlCache.value) return
+  isBackgroundUploading.value = true
+  uploadProgressText.value = 'MENGOMPILASI LIVE GIF...'
+
+  try {
+    const gifUrlBase64 = await compileCompositeGif()
+
+    uploadProgressText.value = 'MENGUNGGAH PHOTO STRIP (1/3)...'
+    const canvas = canvasRef.value
+    if (!canvas) throw new Error('Canvas foto tidak ditemukan')
+    const photoBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9))
+    const photoFile = new File([photoBlob], 'photo.jpg', { type: 'image/jpeg' })
+    uploadedPhotoUrlCache.value = await uploadToLitterbox(photoFile)
+
+    uploadProgressText.value = 'MENGUNGGAH LIVE GIF (2/3)...'
+    const gifBlob = dataURLtoBlob(gifUrlBase64)
+    const gifFile = new File([gifBlob], 'live.gif', { type: 'image/gif' })
+    uploadedGifUrlCache.value = await uploadToLitterbox(gifFile)
+
+    uploadProgressText.value = 'MENYIAPKAN HALAMAN UNDUHAN (3/3)...'
+    const htmlContent = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MOMENTBOX - Hasil Foto Kamu ✦</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Plus+Jakarta+Sans:wght@400;700;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      background-color: #f6f1e9;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      box-sizing: border-box;
+      color: #000;
+    }
+    .container {
+      max-width: 600px;
+      width: 100%;
+      text-align: center;
+    }
+    h1 {
+      font-family: 'Bangers', cursive;
+      font-size: 42px;
+      color: #ff4cb0;
+      text-shadow: 3px 3px 0 #000;
+      margin: 10px 0;
+      letter-spacing: 2px;
+      -webkit-text-stroke: 1.5px #000;
+    }
+    .subtitle {
+      font-weight: 800;
+      font-size: 14px;
+      background: #ffd400;
+      border: 3px solid #000;
+      padding: 6px 12px;
+      display: inline-block;
+      box-shadow: 4px 4px 0 #000;
+      margin-bottom: 30px;
+    }
+    .preview-section {
+      display: flex;
+      flex-direction: column;
+      gap: 30px;
+      margin-bottom: 40px;
+      width: 100%;
+    }
+    .card {
+      background: #fff;
+      border: 4px solid #000;
+      box-shadow: 8px 8px 0 #000;
+      padding: 20px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .card h2 {
+      font-family: 'Bangers', cursive;
+      font-size: 28px;
+      color: #000;
+      margin: 0 0 15px;
+      letter-spacing: 1px;
+    }
+    .image-container {
+      width: 100%;
+      max-width: 450px;
+      border: 4px solid #000;
+      background: #eee;
+      margin-bottom: 20px;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+    }
+    .image-container img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .btn-download {
+      font-family: 'Bangers', cursive;
+      font-size: 20px;
+      color: #000;
+      text-decoration: none;
+      background: #00e5ff;
+      border: 4px solid #000;
+      box-shadow: 5px 5px 0 #000;
+      padding: 12px 30px;
+      cursor: pointer;
+      display: inline-block;
+      transition: transform 0.1s, box-shadow 0.1s;
+    }
+    .btn-download:active {
+      transform: translate(2px, 2px);
+      box-shadow: 3px 3px 0 #000;
+    }
+    .btn-gif {
+      background: #ff4cb0;
+      color: #fff;
+    }
+    .footer {
+      font-size: 11px;
+      color: #777;
+      font-weight: 700;
+      margin-top: 20px;
+      border-top: 2px dashed #ccc;
+      padding-top: 15px;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>✦ MOMENTBOX ✦</h1>
+    <div class="subtitle">HASIL PHOTOBOOTH KAMU</div>
+
+    <div class="preview-section">
+      <!-- STATIC PHOTO CARD -->
+      <div class="card">
+        <h2>PHOTO STRIP</h2>
+        <div class="image-container">
+          <img src="${uploadedPhotoUrlCache.value}" alt="Photo Strip">
+        </div>
+        <a href="${uploadedPhotoUrlCache.value}" download="momentbox-photo.png" class="btn-download">DOWNLOAD FOTO</a>
+      </div>
+
+      <!-- LIVE GIF CARD -->
+      <div class="card">
+        <h2>LIVE GIF</h2>
+        <div class="image-container">
+          <img src="${uploadedGifUrlCache.value}" alt="Live GIF Strip">
+        </div>
+        <a href="${uploadedGifUrlCache.value}" download="momentbox-live.gif" class="btn-download btn-gif">DOWNLOAD GIF</a>
+      </div>
+    </div>
+
+    <div class="footer">
+      *Link ini akan otomatis kedaluwarsa dan terhapus dalam 24 jam.
+    </div>
+  </div>
+</body>
+</html>`
+
+    const htmlBlob = new Blob([htmlContent], { type: 'text/html' })
+    const htmlFile = new File([htmlBlob], 'momentbox.html', { type: 'text/html' })
+    uploadedHtmlUrlCache.value = await uploadToLitterbox(htmlFile)
+
+    uploadProgressText.value = 'SIAP!'
+    if (showQrModal.value && !qrUrl.value) {
+      downloadLink.value = uploadedHtmlUrlCache.value
+      qrUrl.value = `/api/qr?size=450x450&data=${encodeURIComponent(uploadedHtmlUrlCache.value)}`
+    }
+  } catch (err) {
+    console.error('Background upload error:', err)
+    uploadProgressText.value = 'Gagal mengunggah: ' + err.message
+  } finally {
+    isBackgroundUploading.value = false
+  }
+}
+
+async function generateUnifiedQrCode() {
+  showQrModal.value = true
+  if (uploadedHtmlUrlCache.value) {
+    downloadLink.value = uploadedHtmlUrlCache.value
+    qrUrl.value = `/api/qr?size=450x450&data=${encodeURIComponent(uploadedHtmlUrlCache.value)}`
+  } else {
+    qrUrl.value = ''
+    if (!isBackgroundUploading.value) {
+      startBackgroundUpload()
+    }
+  }
+}
+
+const previewBase = computed(() => {
+  const layout = props.selectedFrame
+  if (!layout) {
+    return { isDefault: true, baseW: 600, baseH: 1800 }
+  }
+  const isDefault = !!frameConfigs[layout.id]
+  const baseW = isDefault ? 600 : layout.frame?.width || 1200
+  const baseH = isDefault ? 1800 : layout.frame?.height || 1800
+  return { isDefault, baseW, baseH }
+})
+
+const previewAspect = computed(() => `${previewBase.value.baseW} / ${previewBase.value.baseH}`)
+
+const previewBoxes = computed(() => {
+  const layout = props.selectedFrame
+  if (!layout) return []
+  const { isDefault, baseW, baseH } = previewBase.value
+
+  if (isDefault) {
+    const pw = baseW - 80
+    const ph = (baseH - 420) / 4
+    const startY = 240
+    const gap = 20
+    return Array.from({ length: 4 }, (_, idx) => ({
+      id: idx + 1,
+      x: 40,
+      y: startY + idx * (ph + gap),
+      width: pw,
+      height: ph,
+    }))
+  }
+
+  if (!layout.boxes) return []
+  return [...layout.boxes]
+    .map((box) => ({
+      id: box.id,
+      x: box.x,
+      y: box.y,
+      width: box.width,
+      height: box.height,
+    }))
+    .sort((a, b) => a.id - b.id)
+})
+
+function downloadIndividualGif(idx) {
+  const gifDataUrl = props.gifs[idx]
+  if (!gifDataUrl || gifDataUrl === 'loading') return
+  const link = document.createElement('a')
+  link.download = `potobox-gif-${idx + 1}-${Date.now()}.gif`
+  link.href = gifDataUrl
+  link.click()
+}
+
+function downloadAllGifs() {
+  props.gifs.forEach((gifDataUrl, idx) => {
+    if (gifDataUrl && gifDataUrl !== 'loading') {
+      setTimeout(() => {
+        const link = document.createElement('a')
+        link.download = `potobox-gif-${idx + 1}-${Date.now()}.gif`
+        link.href = gifDataUrl
+        link.click()
+      }, idx * 200)
+    }
+  })
+}
+
+function downloadCombinedGif() {
+  if (isCombinedGenerating.value) return
+
+  if (combinedGifUrl.value) {
+    const link = document.createElement('a')
+    link.download = `potobox-combined-${Date.now()}.gif`
+    link.href = combinedGifUrl.value
+    link.click()
+    return
+  }
+
+  const gifshotLib = window.gifshot
+  if (!gifshotLib) {
+    alert('Library GIF belum siap.')
+    return
+  }
+
+  isCombinedGenerating.value = true
+
+  const img = new Image()
+  img.onload = () => {
+    const targetW = 400
+    const targetH = img.naturalWidth
+      ? Math.round((img.naturalHeight / img.naturalWidth) * targetW)
+      : 300
+
+    gifshotLib.createGIF(
+      {
+        images: props.photos,
+        gifWidth: targetW,
+        gifHeight: targetH,
+        interval: 0.8, // 800ms per image
+        numFrames: props.photos.length,
+        frameDuration: 8,
+        sampleInterval: 10,
+      },
+      (obj) => {
+        isCombinedGenerating.value = false
+        if (!obj.error) {
+          combinedGifUrl.value = obj.image
+          const link = document.createElement('a')
+          link.download = `potobox-combined-${Date.now()}.gif`
+          link.href = obj.image
+          link.click()
+        } else {
+          alert('Gagal membuat combined GIF.')
+        }
+      },
+    )
+  }
+  img.src = props.photos[0] || ''
+}
+
+const loadImage = (src) =>
+  new Promise((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => resolve(img)
+    img.onerror = (e) => reject(e)
+    img.src = src
+  })
+
+let compilePromise = null
+
+function compileCompositeGif() {
+  if (compositeGifUrl.value) {
+    return Promise.resolve(compositeGifUrl.value)
+  }
+  if (compilePromise) {
+    return compilePromise
+  }
+
+  compilePromise = new Promise(async (resolve, reject) => {
+    const gifshotLib = window.gifshot
+    if (!gifshotLib) {
+      compilePromise = null
+      return reject(new Error('Library GIF belum siap.'))
+    }
+
+    const frameCounts = (props.capturedFrames || []).map((arr) => (arr ? arr.length : 0))
+    const validFrameCounts = frameCounts.filter((c) => c > 0)
+    const numFrames = validFrameCounts.length > 0 ? Math.min(...validFrameCounts) : 12
+
+    isCompositeGenerating.value = true
+
+    try {
+      const layout = props.selectedFrame
+      const isDefault = !!frameConfigs[layout.id]
+      const baseW = isDefault ? 600 : layout.frame?.width || 1200
+      const baseH = isDefault ? 1800 : layout.frame?.height || 1800
+      const spacing = 0
+      const canvasWidth = baseW * 2 + spacing
+      const canvasHeight = baseH
+      const scale = 0.5
+
+      let customFrameImg = null
+      if (!isDefault && layout.frameUrl) {
+        customFrameImg = await loadImage(layout.frameUrl)
+      }
+
+      const uniqueFrames = []
+
+      for (let i = 0; i < numFrames; i++) {
+        const canvas = document.createElement('canvas')
+        canvas.width = canvasWidth * scale
+        canvas.height = canvasHeight * scale
+        const ctx = canvas.getContext('2d')
+        ctx.scale(scale, scale)
+
+        if (isDefault) {
+          const cfg = frameConfigs[layout.id]
+          ctx.fillStyle = cfg.bg
+          ctx.fillRect(0, 0, baseW, baseH)
+          ctx.fillRect(baseW, 0, baseW, baseH)
+
+          ctx.fillStyle = cfg.headerBg
+          ctx.fillRect(0, 0, baseW, 200)
+          ctx.fillRect(baseW, 0, baseW, 200)
+
+          ctx.fillStyle = cfg.footerBg
+          ctx.fillRect(0, baseH - 100, baseW, 100)
+          ctx.fillRect(baseW, baseH - 100, baseW, 100)
+        } else {
+          ctx.fillStyle = '#fff'
+          ctx.fillRect(0, 0, canvasWidth, canvasHeight)
+        }
+
+        const leftOrder = [0, 1, 2, 3]
+        const rightOrder = [1, 3, 0, 2]
+
+        const drawStripSlots = async (order, xOffset) => {
+          if (isDefault) {
+            const cfg = frameConfigs[layout.id]
+            const pw = baseW - 80
+            const ph = (baseH - 420) / 4
+            const startY = 240
+            const gap = 20
+
+            for (let idx = 0; idx < order.length; idx++) {
+              const photoIdx = order[idx]
+              const frameArr = props.capturedFrames ? props.capturedFrames[photoIdx] : null
+              const src = frameArr && frameArr[i] ? frameArr[i] : props.photos[photoIdx]
+              if (!src) continue
+
+              const img = await loadImage(src)
+              const y = startY + idx * (ph + gap)
+              const iw = img.width,
+                ih = img.height
+              const aspect = pw / ph
+              let sw, sh, sx, sy
+              if (iw / ih > aspect) {
+                sh = ih
+                sw = ih * aspect
+                sx = (iw - sw) / 2
+                sy = 0
+              } else {
+                sw = iw
+                sh = iw / aspect
+                sx = 0
+                sy = (ih - sh) / 2
+              }
+              ctx.drawImage(img, sx, sy, sw, sh, xOffset + 40, y, pw, ph)
+
+              ctx.strokeStyle = '#000'
+              ctx.lineWidth = 4
+              ctx.strokeRect(xOffset + 40, y, pw, ph)
+            }
+          } else {
+            const orderConfig = layout.layerOrder || ['box-1', 'box-2', 'box-3', 'box-4', 'frame']
+            for (const layerId of orderConfig) {
+              if (layerId === 'frame') {
+                if (customFrameImg) {
+                  ctx.drawImage(customFrameImg, xOffset, 0, baseW, baseH)
+                }
+                continue
+              }
+
+              const boxId = parseInt(layerId.split('-')[1], 10)
+              const box = layout.boxes.find((b) => b.id === boxId)
+              if (!box) continue
+
+              const photoIdx = order[boxId - 1]
+              const frameArr = props.capturedFrames ? props.capturedFrames[photoIdx] : null
+              const src = frameArr && frameArr[i] ? frameArr[i] : props.photos[photoIdx]
+              if (!src) continue
+
+              const img = await loadImage(src)
+              const iw = img.width,
+                ih = img.height
+              const aspect = box.width / box.height
+              let sw, sh, sx, sy
+              if (iw / ih > aspect) {
+                sh = ih
+                sw = ih * aspect
+                sx = (iw - sw) / 2
+                sy = 0
+              } else {
+                sw = iw
+                sh = iw / aspect
+                sx = 0
+                sy = (ih - sh) / 2
+              }
+              ctx.drawImage(img, sx, sy, sw, sh, xOffset + box.x, box.y, box.width, box.height)
+
+              if (customFrameImg && orderConfig.indexOf('frame') > orderConfig.indexOf(layerId)) {
+                ctx.drawImage(customFrameImg, xOffset, 0, baseW, baseH)
+              }
+            }
+          }
+        }
+
+        await drawStripSlots(leftOrder, 0)
+        await drawStripSlots(rightOrder, baseW)
+
+        if (isDefault) {
+          const cfg = frameConfigs[layout.id]
+          ctx.fillStyle = cfg.headerText
+          ctx.font = 'bold 50px Bangers'
+          ctx.textAlign = 'center'
+          ctx.fillText(`✦ ${layout.name} ✦`, baseW / 2, 125)
+          ctx.fillText(`✦ ${layout.name} ✦`, baseW + baseW / 2, 125)
+
+          ctx.strokeStyle = cfg.border
+          ctx.lineWidth = 20
+          ctx.strokeRect(10, 10, baseW - 20, baseH - 20)
+          ctx.strokeRect(baseW + 10, 10, baseW - 20, baseH - 20)
+        }
+
+        uniqueFrames.push(canvas.toDataURL('image/jpeg', 0.8))
+      }
+
+      const compositeFrames = []
+      for (let r = 0; r < 3; r++) {
+        compositeFrames.push(...uniqueFrames)
+      }
+
+      gifshotLib.createGIF(
+        {
+          images: compositeFrames,
+          gifWidth: canvasWidth * scale,
+          gifHeight: canvasHeight * scale,
+          interval: 0.1,
+          numFrames: compositeFrames.length,
+          frameDuration: 1,
+          sampleInterval: 10,
+        },
+        (obj) => {
+          isCompositeGenerating.value = false
+          compilePromise = null
+          if (!obj.error) {
+            compositeGifUrl.value = obj.image
+            resolve(obj.image)
+          } else {
+            reject(new Error(obj.error))
+          }
+        },
+      )
+    } catch (err) {
+      isCompositeGenerating.value = false
+      compilePromise = null
+      reject(err)
+    }
+  })
+
+  return compilePromise
+}
+
+async function downloadCompositeGif() {
+  isGifDownloadClicked.value = true
+  try {
+    const gifUrl = await compileCompositeGif()
+    const link = document.createElement('a')
+    link.download = `potobox-live-${Date.now()}.gif`
+    link.href = gifUrl
+    link.click()
+  } catch (err) {
+    console.error('GIF Compilation error details:', err)
+    alert('Gagal mengompilasi GIF: ' + err.message)
+  } finally {
+    isGifDownloadClicked.value = false
+  }
+}
+
+function dataURLtoBlob(dataurl) {
+  const arr = dataurl.split(',')
+  const mime = arr[0].match(/:(.*?);/)[1]
+  const bstr = atob(arr[1])
+  let n = bstr.length
+  const u8arr = new Uint8Array(n)
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n)
+  }
+  return new Blob([u8arr], { type: mime })
+}
+
+
 onMounted(() => {
-  setTimeout(drawStrip, 500);
-});
+  setTimeout(async () => {
+    await drawStrip()
+    // Allow small delay for canvas DOM width/height rendering
+    setTimeout(() => {
+      updateCanvasSize()
+      startBackgroundUpload()
+    }, 50)
+  }, 500)
+  window.addEventListener('resize', updateCanvasSize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateCanvasSize)
+})
 </script>
 
 <template>
-  <div class="checkerboard" style="width: 100vw; height: 100vh; overflow: hidden; display: flex;">
-    <div style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px; position: relative;">
-      <canvas ref="canvasRef" style="max-width: 100%; max-height: 100%; background: #fff;"></canvas>
+  <div
+    class="checkerboard"
+    style="width: 100vw; height: 100vh; overflow: hidden; display: flex; box-sizing: border-box"
+  >
+    <!-- LEFT SIDE: PREVIEW PANEL -->
+    <div
+      style="
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 40px;
+        position: relative;
+        max-height: 100%;
+        overflow: hidden;
+        box-sizing: border-box;
+      "
+    >
+      <!-- Shared Wrapper for both Photo and GIF strip to guarantee identical sizing -->
+      <div
+        :style="{
+          aspectRatio: (previewBase.baseW * 2) + '/' + previewBase.baseH
+        }"
+        style="
+          height: 100%;
+          width: auto;
+          max-width: 100%;
+          max-height: 100%;
+          background: #fff;
+          box-shadow: 10px 10px 0 #000;
+          border: 4px solid #000;
+          box-sizing: border-box;
+          position: relative;
+        "
+      >
+        <!-- Canvas for Static Photo -->
+        <canvas
+          v-show="activeTab === 'photo'"
+          ref="canvasRef"
+          style="
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+            box-sizing: border-box;
+          "
+        ></canvas>
+
+        <div
+          v-if="activeTab === 'gif'"
+          style="
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            gap: 0px;
+            box-sizing: border-box;
+            overflow: hidden;
+          "
+        >
+          <!-- Left Strip (Normal Order) -->
+          <div
+            style="
+              flex: 1;
+              height: 100%;
+              position: relative;
+              container-type: inline-size;
+              box-sizing: border-box;
+            "
+          >
+            <div
+              class="live-strip"
+              :style="{
+                position: 'relative',
+                width: '100%',
+                height: '100%',
+                background: previewBase.isDefault ? frameConfigs[selectedFrame.id]?.bg : '#fff',
+                border: previewBase.isDefault
+                  ? `calc((20 / ${previewBase.baseW}) * 100%) solid ${frameConfigs[selectedFrame.id]?.border}`
+                  : 'none',
+                boxSizing: 'border-box',
+              }"
+            >
+              <!-- Header and Footer for Default layout -->
+              <template v-if="previewBase.isDefault">
+                <div
+                  :style="{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: (200 / previewBase.baseH) * 100 + '%',
+                    background: frameConfigs[selectedFrame.id]?.headerBg,
+                    color: frameConfigs[selectedFrame.id]?.headerText,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontFamily: 'Bangers, cursive',
+                    fontSize: '4.5cqw',
+                    fontWeight: 'bold',
+                  }"
+                >
+                  ✦ {{ selectedFrame.name }} ✦
+                </div>
+                <div
+                  :style="{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    width: '100%',
+                    height: (100 / previewBase.baseH) * 100 + '%',
+                    background: frameConfigs[selectedFrame.id]?.footerBg,
+                  }"
+                ></div>
+              </template>
+
+              <!-- Custom overlay frame image -->
+              <img
+                v-if="!previewBase.isDefault && selectedFrame.frameUrl"
+                :src="selectedFrame.frameUrl"
+                style="
+                  position: absolute;
+                  top: 0;
+                  left: 0;
+                  width: 100%;
+                  height: 100%;
+                  z-index: 10;
+                  pointer-events: none;
+                "
+              />
+
+              <!-- Boxes -->
+              <div
+                v-for="(box, idx) in previewBoxes"
+                :key="box.id"
+                :style="{
+                  position: 'absolute',
+                  left: (box.x / previewBase.baseW) * 100 + '%',
+                  top: (box.y / previewBase.baseH) * 100 + '%',
+                  width: (box.width / previewBase.baseW) * 100 + '%',
+                  height: (box.height / previewBase.baseH) * 100 + '%',
+                  overflow: 'hidden',
+                  border: previewBase.isDefault ? '2px solid #000' : 'none',
+                  background: '#222',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxSizing: 'border-box',
+                }"
+              >
+                <div v-if="gifs[idx] === 'loading'" class="gif-loader-container">
+                  <div class="gif-spinner"></div>
+                </div>
+                <img
+                  v-else-if="gifs[idx]"
+                  :src="gifs[idx]"
+                  style="width: 100%; height: 100%; object-fit: cover"
+                />
+                <img
+                  v-else-if="photos[idx]"
+                  :src="photos[idx]"
+                  style="width: 100%; height: 100%; object-fit: cover"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Strip (Shuffled Order) -->
+          <div
+            style="
+              flex: 1;
+              height: 100%;
+              position: relative;
+              container-type: inline-size;
+              box-sizing: border-box;
+            "
+          >
+            <div
+              class="live-strip"
+              :style="{
+                position: 'relative',
+                width: '100%',
+                height: '100%',
+                background: previewBase.isDefault ? frameConfigs[selectedFrame.id]?.bg : '#fff',
+                border: previewBase.isDefault
+                  ? `calc((20 / ${previewBase.baseW}) * 100%) solid ${frameConfigs[selectedFrame.id]?.border}`
+                  : 'none',
+                boxSizing: 'border-box',
+              }"
+            >
+              <!-- Header and Footer for Default layout -->
+              <template v-if="previewBase.isDefault">
+                <div
+                  :style="{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: (200 / previewBase.baseH) * 100 + '%',
+                    background: frameConfigs[selectedFrame.id]?.headerBg,
+                    color: frameConfigs[selectedFrame.id]?.headerText,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontFamily: 'Bangers, cursive',
+                    fontSize: '4.5cqw',
+                    fontWeight: 'bold',
+                  }"
+                >
+                  ✦ {{ selectedFrame.name }} ✦
+                </div>
+                <div
+                  :style="{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    width: '100%',
+                    height: (100 / previewBase.baseH) * 100 + '%',
+                    background: frameConfigs[selectedFrame.id]?.footerBg,
+                  }"
+                ></div>
+              </template>
+
+              <!-- Custom overlay frame image -->
+              <img
+                v-if="!previewBase.isDefault && selectedFrame.frameUrl"
+                :src="selectedFrame.frameUrl"
+                style="
+                  position: absolute;
+                  top: 0;
+                  left: 0;
+                  width: 100%;
+                  height: 100%;
+                  z-index: 10;
+                  pointer-events: none;
+                "
+              />
+
+              <!-- Boxes -->
+              <div
+                v-for="(box, idx) in previewBoxes"
+                :key="box.id"
+                :style="{
+                  position: 'absolute',
+                  left: (box.x / previewBase.baseW) * 100 + '%',
+                  top: (box.y / previewBase.baseH) * 100 + '%',
+                  width: (box.width / previewBase.baseW) * 100 + '%',
+                  height: (box.height / previewBase.baseH) * 100 + '%',
+                  overflow: 'hidden',
+                  border: previewBase.isDefault ? '2px solid #000' : 'none',
+                  background: '#222',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxSizing: 'border-box',
+                }"
+              >
+                <div v-if="gifs[[1, 3, 0, 2][idx]] === 'loading'" class="gif-loader-container">
+                  <div class="gif-spinner"></div>
+                </div>
+                <img
+                  v-else-if="gifs[[1, 3, 0, 2][idx]]"
+                  :src="gifs[[1, 3, 0, 2][idx]]"
+                  style="width: 100%; height: 100%; object-fit: cover"
+                />
+                <img
+                  v-else-if="photos[[1, 3, 0, 2][idx]]"
+                  :src="photos[[1, 3, 0, 2][idx]]"
+                  style="width: 100%; height: 100%; object-fit: cover"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div style="width: 400px; background: #f6f1e9; border-left: 6px solid #000; padding: 40px; display: flex; flex-direction: column; gap: 20px; box-shadow: -10px 0 30px rgba(0,0,0,0.1); z-index: 10;">
-      <header style="text-align: center; margin-bottom: 20px;">
-        <h1 class="neo-title" style="font-size: 48px; color: #ff4cb0; text-shadow: 4px 4px 0 #000; margin-bottom: 10px; line-height: 0.9;">FOTO STRIP KAMU</h1>
-        <div class="neo-chip" style="background: #ffd400; font-size: 14px; font-weight: 900;">FRAME: {{ selectedFrame.name }}</div>
+    <!-- RIGHT SIDE: CONTROL PANEL -->
+    <div
+      style="
+        width: 400px;
+        background: #f6f1e9;
+        border-left: 6px solid #000;
+        padding: 40px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        box-shadow: -10px 0 30px rgba(0, 0, 0, 0.1);
+        z-index: 10;
+        overflow-y: auto;
+        max-height: 100vh;
+        box-sizing: border-box;
+      "
+    >
+      <header style="text-align: center; margin-bottom: 10px">
+        <h1
+          class="neo-title"
+          style="
+            font-size: 48px;
+            color: #ff4cb0;
+            text-shadow: 4px 4px 0 #000;
+            margin-bottom: 10px;
+            line-height: 0.9;
+          "
+        >
+          FOTO STRIP KAMU
+        </h1>
+        <div class="neo-chip" style="background: #ffd400; font-size: 14px; font-weight: 900">
+          FRAME: {{ selectedFrame.name }}
+        </div>
       </header>
 
-      <div style="display: flex; flex-direction: column; gap: 15px;">
-        <button class="btn-3d neo-btn" style="background: #00e5ff; padding: 18px; font-size: 20px;" @click="downloadImage">DOWNLOAD FOTO</button>
-        <button class="btn-3d neo-btn" style="background: #ffd400; padding: 18px; font-size: 20px;" @click="generateQrCode">QR FOTO</button>
-        <button class="btn-3d neo-btn" style="background: #a855f7; color: white; padding: 18px; font-size: 20px;" @click="emit('change-frame')">UBAH FRAME</button>
-        <button class="btn-3d neo-btn" style="background: #ff4cb0; color: white; padding: 18px; font-size: 20px;" @click="emit('retake')">FOTO ULANG</button>
-        <button class="btn-3d neo-btn" style="background: #fff; color: #000; padding: 18px; font-size: 20px; border: 4px solid #000;" @click="emit('go-home')">BERANDA</button>
+      <!-- TAB CONTROLLER -->
+      <div
+        style="
+          display: flex;
+          border: 4px solid #000;
+          margin-bottom: 10px;
+          background: #fff;
+          box-shadow: 4px 4px 0 #000;
+          flex-shrink: 0;
+        "
+      >
+        <button
+          @click="activeTab = 'photo'"
+          :style="{ background: activeTab === 'photo' ? '#00e5ff' : '#fff' }"
+          style="
+            flex: 1;
+            padding: 12px;
+            font-family: 'Bangers', cursive;
+            font-size: 20px;
+            border: none;
+            cursor: pointer;
+            outline: none;
+            transition: background 0.2s;
+          "
+        >
+          PHOTO STRIP
+        </button>
+        <button
+          @click="activeTab = 'gif'"
+          :style="{ background: activeTab === 'gif' ? '#00e5ff' : '#fff' }"
+          style="
+            flex: 1;
+            padding: 12px;
+            font-family: 'Bangers', cursive;
+            font-size: 20px;
+            border-left: 4px solid #000;
+            border-top: none;
+            border-bottom: none;
+            border-right: none;
+            cursor: pointer;
+            outline: none;
+            transition: background 0.2s;
+          "
+        >
+          LIVE GIFS
+        </button>
+      </div>
+
+      <!-- ACTION BUTTONS -->
+      <div style="display: flex; flex-direction: column; gap: 15px">
+        <button
+          class="btn-3d neo-btn"
+          style="background: #00e5ff; padding: 18px; font-size: 20px"
+          @click="downloadImage"
+        >
+          DOWNLOAD FOTO
+        </button>
+
+        <button
+          class="btn-3d neo-btn"
+          style="background: #00e5ff; padding: 18px; font-size: 20px"
+          @click="downloadCompositeGif"
+        >
+          {{ isGifDownloadClicked ? 'MENGUNDUH...' : 'DOWNLOAD GIF STRIP' }}
+        </button>
+
+        <button
+          class="btn-3d neo-btn"
+          style="background: #a855f7; color: white; padding: 18px; font-size: 20px"
+          :disabled="isVideoGenerating"
+          @click="downloadCompositeVideo"
+        >
+          {{ isVideoGenerating ? 'MENGEREKAM VIDEO...' : 'DOWNLOAD VIDEO (MP4/STORY)' }}
+        </button>
+
+        <button
+          class="btn-3d neo-btn"
+          style="background: #ffd400; padding: 18px; font-size: 20px"
+          :disabled="isUploading"
+          @click="generateUnifiedQrCode"
+        >
+          {{ isUploading ? 'MENGUNGGAH...' : 'QR CODE' }}
+        </button>
+      </div>
+
+      <!-- COMMON BUTTONS -->
+      <div
+        style="
+          display: flex;
+          flex-direction: column;
+          gap: 15px;
+          margin-top: -5px;
+        "
+      >
+        <button
+          class="btn-3d neo-btn"
+          style="background: #a855f7; color: white; padding: 18px; font-size: 20px"
+          @click="emit('change-frame')"
+        >
+          UBAH FRAME
+        </button>
+        <button
+          class="btn-3d neo-btn"
+          style="background: #ff4cb0; color: white; padding: 18px; font-size: 20px"
+          @click="emit('retake')"
+        >
+          FOTO ULANG
+        </button>
+        <button
+          class="btn-3d neo-btn"
+          style="
+            background: #fff;
+            color: #000;
+            padding: 18px;
+            font-size: 20px;
+            border: 4px solid #000;
+          "
+          @click="emit('go-home')"
+        >
+          BERANDA
+        </button>
       </div>
     </div>
 
     <!-- QR Modal -->
-    <div v-if="showQrModal" style="position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 100; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(8px);">
-      <div class="neo-block bounce-in" style="background: white; padding: 40px; text-align: center; max-width: 450px; width: 90%; position: relative;">
-        <button @click="showQrModal = false" style="position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 30px; cursor: pointer; font-weight: 900;">✕</button>
-        <h2 class="neo-title" style="font-size: 32px; margin-bottom: 20px;">UNDUH FOTO DISINI</h2>
-        <div style="width: 350px; height: 350px; background: #fff; margin: 0 auto; border: 4px solid #000; display: flex; align-items: center; justify-content: center; position: relative; box-shadow: 10px 10px 0 #000;">
-          <div v-if="!qrUrl" style="display: flex; flex-direction: column; align-items: center; gap: 15px;">
-            <div style="width: 50px; height: 50px; border: 6px solid #ff4cb0; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-            <p style="font-weight: 800; font-size: 14px; color: #000;">MENGUNGGAH FOTO...</p>
+    <div
+      v-if="showQrModal"
+      style="
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.85);
+        z-index: 100;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(8px);
+      "
+    >
+      <div
+        class="neo-block bounce-in"
+        style="
+          background: white;
+          padding: 40px;
+          text-align: center;
+          max-width: 450px;
+          width: 90%;
+          position: relative;
+        "
+      >
+        <button
+          @click="showQrModal = false"
+          style="
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 30px;
+            cursor: pointer;
+            font-weight: 900;
+          "
+        >
+          ✕
+        </button>
+        <h2 class="neo-title" style="font-size: 32px; margin-bottom: 20px">UNDUH FOTO DISINI</h2>
+        <div
+          style="
+            width: 350px;
+            height: 350px;
+            background: #fff;
+            margin: 0 auto;
+            border: 4px solid #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            box-shadow: 10px 10px 0 #000;
+          "
+        >
+          <div
+            v-if="!qrUrl"
+            style="display: flex; flex-direction: column; align-items: center; gap: 15px"
+          >
+            <div
+              style="
+                width: 50px;
+                height: 50px;
+                border: 6px solid #ff4cb0;
+                border-top-color: transparent;
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+              "
+            ></div>
+            <p style="font-weight: 800; font-size: 14px; color: #000">{{ uploadProgressText || 'MENGUNGGAH...' }}</p>
           </div>
-          <img v-else :src="qrUrl" style="width: 90%; height: 90%; image-rendering: pixelated;" />
+          <img v-else :src="qrUrl" style="width: 90%; height: 90%; image-rendering: pixelated" />
         </div>
-        <div style="margin-top: 25px; font-size: 11px; color: #888; font-weight: 700; border-top: 2px dashed #eee; pt-15">
+        <div
+          style="
+            margin-top: 25px;
+            font-size: 11px;
+            color: #888;
+            font-weight: 700;
+            border-top: 2px dashed #eee;
+            padding-top: 15px;
+          "
+        >
           *Link foto akan otomatis terhapus dalam 24 jam.
         </div>
       </div>
@@ -231,11 +1345,44 @@ onMounted(() => {
 </template>
 
 <style scoped>
-@keyframes spin { to { transform: rotate(360deg); } }
-@keyframes bounceIn {
-  0% { transform: scale(0.3); opacity: 0; }
-  60% { transform: scale(1.1); }
-  100% { transform: scale(1); opacity: 1; }
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
-.bounce-in { animation: bounceIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+@keyframes bounceIn {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.bounce-in {
+  animation: bounceIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.gif-loader-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: #222;
+}
+
+.gif-spinner {
+  width: 32px;
+  height: 32px;
+  border: 4px solid #ff4cb0;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
 </style>

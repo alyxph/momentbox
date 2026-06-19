@@ -9,6 +9,8 @@ import { frames } from './data/frames';
 
 const page = ref('home');
 const photos = ref([]);
+const gifs = ref([]);
+const capturedFrames = ref([]);
 const selectedFrame = ref(null);
 const cameraKey = ref(0);
 const customLayouts = ref([]);
@@ -26,6 +28,8 @@ if (saved) {
 
 function goToCamera() {
   photos.value = [];
+  gifs.value = [];
+  capturedFrames.value = [];
   page.value = 'camera';
   cameraKey.value += 1;
 }
@@ -33,11 +37,15 @@ function goToCamera() {
 function goHome() {
   page.value = 'home';
   photos.value = [];
+  gifs.value = [];
+  capturedFrames.value = [];
   selectedFrame.value = null;
 }
 
 function startFlow() {
   photos.value = [];
+  gifs.value = [];
+  capturedFrames.value = [];
   selectedFrame.value = null;
   frameNextPage.value = 'camera';
   page.value = 'frames';
@@ -110,6 +118,8 @@ function deleteLayout(id) {
       :key="cameraKey"
       :selected-frame="selectedFrame"
       v-model:photos="photos"
+      v-model:gifs="gifs"
+      v-model:captured-frames="capturedFrames"
       @done="goToPreview"
       @go-home="goHome"
       @change-frame="() => openFrames('camera')"
@@ -128,6 +138,8 @@ function deleteLayout(id) {
       v-else-if="page === 'preview'"
       :selected-frame="selectedFrame"
       :photos="photos"
+      :gifs="gifs"
+      :captured-frames="capturedFrames"
       @change-frame="changeFrame"
       @retake="retakePhotos"
       @go-home="goHome"
