@@ -308,23 +308,24 @@ function captureNext() {
 
   statusText.value = `Bersiap foto ${idx + 1}...`;
   showSmile.value = false;
+
+  // Mulai merekam frame sejak countdown dimulai
+  const recordedFrames = [];
+  const initialFrame = captureGifFrame();
+  if (initialFrame) recordedFrames.push(initialFrame);
+  
+  gifRecordInterval = setInterval(() => {
+    const frame = captureGifFrame();
+    if (frame) {
+      recordedFrames.push(frame);
+    }
+  }, 150); // Merekam setiap 150ms agar jumlah frame tidak terlalu besar (krn durasinya lebih panjang)
+
   runCountdown(3, () => {
     showSmile.value = true;
     statusText.value = `Tahan senyum... 😄`;
     
-    // Start recording frames
-    const recordedFrames = [];
-    const initialFrame = captureGifFrame();
-    if (initialFrame) recordedFrames.push(initialFrame);
-    
-    gifRecordInterval = setInterval(() => {
-      const frame = captureGifFrame();
-      if (frame) {
-        recordedFrames.push(frame);
-      }
-    }, 100);
-    
-    // Jeda 2.0 detik agar pengguna sempat tersenyum setelah melihat tulisan SENYUM!
+    // Jeda 1.0 detik agar pengguna sempat tersenyum setelah melihat tulisan SENYUM!
     seqTimer = setTimeout(() => {
       if (gifRecordInterval) {
         clearInterval(gifRecordInterval);
@@ -339,7 +340,7 @@ function captureNext() {
         showSmile.value = false;
         captureNext();
       }, 800);
-    }, 2000);
+    }, 1000);
   });
 }
 
@@ -371,21 +372,21 @@ async function retakePhoto(index) {
   showSmile.value = false;
   statusText.value = `Retake foto ${index + 1}...`;
 
+  // Mulai merekam frame sejak countdown dimulai
+  const recordedFrames = [];
+  const initialFrame = captureGifFrame();
+  if (initialFrame) recordedFrames.push(initialFrame);
+  
+  gifRecordInterval = setInterval(() => {
+    const frame = captureGifFrame();
+    if (frame) {
+      recordedFrames.push(frame);
+    }
+  }, 150);
+
   runCountdown(3, () => {
     showSmile.value = true;
     statusText.value = 'Tahan senyum... 😄';
-    
-    // Start recording frames
-    const recordedFrames = [];
-    const initialFrame = captureGifFrame();
-    if (initialFrame) recordedFrames.push(initialFrame);
-    
-    gifRecordInterval = setInterval(() => {
-      const frame = captureGifFrame();
-      if (frame) {
-        recordedFrames.push(frame);
-      }
-    }, 100);
     
     seqTimer = setTimeout(() => {
       if (gifRecordInterval) {
@@ -402,7 +403,7 @@ async function retakePhoto(index) {
         isCapturing.value = false;
         stopCamera();
       }, 800);
-    }, 2000);
+    }, 1000);
   });
 }
 

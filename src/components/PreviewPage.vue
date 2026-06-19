@@ -39,6 +39,8 @@ const combinedGifUrl = ref('')
 const isCompositeGenerating = ref(false)
 const compositeGifUrl = ref('')
 const isGifDownloadClicked = ref(false)
+const isVideoGenerating = ref(false)
+const videoProgress = ref(0)
 const canvasWidth = ref(0)
 const canvasHeight = ref(0)
 
@@ -239,10 +241,10 @@ async function uploadToLitterbox(file) {
 async function startBackgroundUpload() {
   if (isBackgroundUploading.value || uploadedHtmlUrlCache.value) return
   isBackgroundUploading.value = true
-  uploadProgressText.value = 'MENGOMPILASI LIVE GIF...'
+  uploadProgressText.value = 'MENGOMPILASI LIVE VIDEO...'
 
   try {
-    const gifUrlBase64 = await compileCompositeGif()
+    const videoData = await compileCompositeVideo()
 
     uploadProgressText.value = 'MENGUNGGAH PHOTO STRIP (1/3)...'
     const canvas = canvasRef.value
@@ -251,10 +253,9 @@ async function startBackgroundUpload() {
     const photoFile = new File([photoBlob], 'photo.jpg', { type: 'image/jpeg' })
     uploadedPhotoUrlCache.value = await uploadToLitterbox(photoFile)
 
-    uploadProgressText.value = 'MENGUNGGAH LIVE GIF (2/3)...'
-    const gifBlob = dataURLtoBlob(gifUrlBase64)
-    const gifFile = new File([gifBlob], 'live.gif', { type: 'image/gif' })
-    uploadedGifUrlCache.value = await uploadToLitterbox(gifFile)
+    uploadProgressText.value = 'MENGUNGGAH LIVE VIDEO (2/3)...'
+    const videoFile = new File([videoData.blob], `live.${videoData.fileExt}`, { type: videoData.blob.type })
+    uploadedGifUrlCache.value = await uploadToLitterbox(videoFile)
 
     uploadProgressText.value = 'MENYIAPKAN HALAMAN UNDUHAN (3/3)...'
     const htmlContent = `<!DOCTYPE html>
@@ -335,7 +336,7 @@ async function startBackgroundUpload() {
       display: flex;
       justify-content: center;
     }
-    .image-container img {
+    .image-container img, .image-container video {
       width: 100%;
       height: auto;
       display: block;
@@ -387,13 +388,13 @@ async function startBackgroundUpload() {
         <a href="${uploadedPhotoUrlCache.value}" download="momentbox-photo.png" class="btn-download">DOWNLOAD FOTO</a>
       </div>
 
-      <!-- LIVE GIF CARD -->
+      <!-- LIVE VIDEO CARD -->
       <div class="card">
-        <h2>LIVE GIF</h2>
+        <h2>LIVE VIDEO</h2>
         <div class="image-container">
-          <img src="${uploadedGifUrlCache.value}" alt="Live GIF Strip">
+          <video src="${uploadedGifUrlCache.value}" autoplay loop muted playsinline></video>
         </div>
-        <a href="${uploadedGifUrlCache.value}" download="momentbox-live.gif" class="btn-download btn-gif">DOWNLOAD GIF</a>
+        <a href="${uploadedGifUrlCache.value}" download="momentbox-live.${videoData.fileExt}" class="btn-download btn-gif">DOWNLOAD VIDEO</a>
       </div>
     </div>
 
@@ -562,28 +563,16 @@ const loadImage = (src) =>
     img.src = src
   })
 
-let compilePromise = null
+let compileVideoPromise = null
 
-function compileCompositeGif() {
-  if (compositeGifUrl.value) {
-    return Promise.resolve(compositeGifUrl.value)
-  }
-  if (compilePromise) {
-    return compilePromise
+function compileCompositeVideo() {
+  if (compileVideoPromise) {
+    return compileVideoPromise
   }
 
-  compilePromise = new Promise(async (resolve, reject) => {
-    const gifshotLib = window.gifshot
-    if (!gifshotLib) {
-      compilePromise = null
-      return reject(new Error('Library GIF belum siap.'))
-    }
-
-    const frameCounts = (props.capturedFrames || []).map((arr) => (arr ? arr.length : 0))
-    const validFrameCounts = frameCounts.filter((c) => c > 0)
-    const numFrames = validFrameCounts.length > 0 ? Math.min(...validFrameCounts) : 12
-
-    isCompositeGenerating.value = true
+  compileVideoPromise = new Promise(async (resolve, reject) => {
+    isVideoGenerating.value = true
+    videoProgress.value = 0
 
     try {
       const layout = props.selectedFrame
@@ -591,22 +580,29 @@ function compileCompositeGif() {
       const baseW = isDefault ? 600 : layout.frame?.width || 1200
       const baseH = isDefault ? 1800 : layout.frame?.height || 1800
       const spacing = 0
-      const canvasWidth = baseW * 2 + spacing
-      const canvasHeight = baseH
+      const fullW = baseW * 2 + spacing
+      const fullH = baseH
       const scale = 0.5
+      const outW = Math.round(fullW * scale)
+      const outH = Math.round(fullH * scale)
+
+      const frameCounts = (props.capturedFrames || []).map((arr) => (arr ? arr.length : 0))
+      const validFrameCounts = frameCounts.filter((c) => c > 0)
+      const numFrames = validFrameCounts.length > 0 ? Math.min(...validFrameCounts) : 12
 
       let customFrameImg = null
       if (!isDefault && layout.frameUrl) {
         customFrameImg = await loadImage(layout.frameUrl)
       }
 
-      const uniqueFrames = []
-
+      // Render all unique frames first
+      const uniqueFrameDataURLs = []
       for (let i = 0; i < numFrames; i++) {
-        const canvas = document.createElement('canvas')
-        canvas.width = canvasWidth * scale
-        canvas.height = canvasHeight * scale
-        const ctx = canvas.getContext('2d')
+        videoProgress.value = Math.round((i / numFrames) * 30)
+        const offscreen = document.createElement('canvas')
+        offscreen.width = outW
+        offscreen.height = outH
+        const ctx = offscreen.getContext('2d')
         ctx.scale(scale, scale)
 
         if (isDefault) {
@@ -614,17 +610,15 @@ function compileCompositeGif() {
           ctx.fillStyle = cfg.bg
           ctx.fillRect(0, 0, baseW, baseH)
           ctx.fillRect(baseW, 0, baseW, baseH)
-
           ctx.fillStyle = cfg.headerBg
           ctx.fillRect(0, 0, baseW, 200)
           ctx.fillRect(baseW, 0, baseW, 200)
-
           ctx.fillStyle = cfg.footerBg
           ctx.fillRect(0, baseH - 100, baseW, 100)
           ctx.fillRect(baseW, baseH - 100, baseW, 100)
         } else {
           ctx.fillStyle = '#fff'
-          ctx.fillRect(0, 0, canvasWidth, canvasHeight)
+          ctx.fillRect(0, 0, fullW, fullH)
         }
 
         const leftOrder = [0, 1, 2, 3]
@@ -637,32 +631,19 @@ function compileCompositeGif() {
             const ph = (baseH - 420) / 4
             const startY = 240
             const gap = 20
-
             for (let idx = 0; idx < order.length; idx++) {
               const photoIdx = order[idx]
               const frameArr = props.capturedFrames ? props.capturedFrames[photoIdx] : null
               const src = frameArr && frameArr[i] ? frameArr[i] : props.photos[photoIdx]
               if (!src) continue
-
               const img = await loadImage(src)
               const y = startY + idx * (ph + gap)
-              const iw = img.width,
-                ih = img.height
+              const iw = img.width, ih = img.height
               const aspect = pw / ph
               let sw, sh, sx, sy
-              if (iw / ih > aspect) {
-                sh = ih
-                sw = ih * aspect
-                sx = (iw - sw) / 2
-                sy = 0
-              } else {
-                sw = iw
-                sh = iw / aspect
-                sx = 0
-                sy = (ih - sh) / 2
-              }
+              if (iw / ih > aspect) { sh = ih; sw = ih * aspect; sx = (iw - sw) / 2; sy = 0 }
+              else { sw = iw; sh = iw / aspect; sx = 0; sy = (ih - sh) / 2 }
               ctx.drawImage(img, sx, sy, sw, sh, xOffset + 40, y, pw, ph)
-
               ctx.strokeStyle = '#000'
               ctx.lineWidth = 4
               ctx.strokeRect(xOffset + 40, y, pw, ph)
@@ -671,39 +652,23 @@ function compileCompositeGif() {
             const orderConfig = layout.layerOrder || ['box-1', 'box-2', 'box-3', 'box-4', 'frame']
             for (const layerId of orderConfig) {
               if (layerId === 'frame') {
-                if (customFrameImg) {
-                  ctx.drawImage(customFrameImg, xOffset, 0, baseW, baseH)
-                }
+                if (customFrameImg) ctx.drawImage(customFrameImg, xOffset, 0, baseW, baseH)
                 continue
               }
-
               const boxId = parseInt(layerId.split('-')[1], 10)
               const box = layout.boxes.find((b) => b.id === boxId)
               if (!box) continue
-
               const photoIdx = order[boxId - 1]
               const frameArr = props.capturedFrames ? props.capturedFrames[photoIdx] : null
               const src = frameArr && frameArr[i] ? frameArr[i] : props.photos[photoIdx]
               if (!src) continue
-
               const img = await loadImage(src)
-              const iw = img.width,
-                ih = img.height
+              const iw = img.width, ih = img.height
               const aspect = box.width / box.height
               let sw, sh, sx, sy
-              if (iw / ih > aspect) {
-                sh = ih
-                sw = ih * aspect
-                sx = (iw - sw) / 2
-                sy = 0
-              } else {
-                sw = iw
-                sh = iw / aspect
-                sx = 0
-                sy = (ih - sh) / 2
-              }
+              if (iw / ih > aspect) { sh = ih; sw = ih * aspect; sx = (iw - sw) / 2; sy = 0 }
+              else { sw = iw; sh = iw / aspect; sx = 0; sy = (ih - sh) / 2 }
               ctx.drawImage(img, sx, sy, sw, sh, xOffset + box.x, box.y, box.width, box.height)
-
               if (customFrameImg && orderConfig.indexOf('frame') > orderConfig.indexOf(layerId)) {
                 ctx.drawImage(customFrameImg, xOffset, 0, baseW, baseH)
               }
@@ -721,65 +686,129 @@ function compileCompositeGif() {
           ctx.textAlign = 'center'
           ctx.fillText(`✦ ${layout.name} ✦`, baseW / 2, 125)
           ctx.fillText(`✦ ${layout.name} ✦`, baseW + baseW / 2, 125)
-
           ctx.strokeStyle = cfg.border
           ctx.lineWidth = 20
           ctx.strokeRect(10, 10, baseW - 20, baseH - 20)
           ctx.strokeRect(baseW + 10, 10, baseW - 20, baseH - 20)
         }
 
-        uniqueFrames.push(canvas.toDataURL('image/jpeg', 0.8))
+        uniqueFrameDataURLs.push(offscreen.toDataURL('image/jpeg', 0.85))
       }
 
-      const compositeFrames = []
+      videoProgress.value = 35
+
+      // Preload all frame images
+      const frameImages = []
+      for (const dataUrl of uniqueFrameDataURLs) {
+        frameImages.push(await loadImage(dataUrl))
+      }
+
+      // Repeat frames 3x for longer video
+      const repeatedFrames = []
       for (let r = 0; r < 3; r++) {
-        compositeFrames.push(...uniqueFrames)
+        repeatedFrames.push(...frameImages)
       }
 
-      gifshotLib.createGIF(
-        {
-          images: compositeFrames,
-          gifWidth: canvasWidth * scale,
-          gifHeight: canvasHeight * scale,
-          interval: 0.1,
-          numFrames: compositeFrames.length,
-          frameDuration: 1,
-          sampleInterval: 10,
-        },
-        (obj) => {
-          isCompositeGenerating.value = false
-          compilePromise = null
-          if (!obj.error) {
-            compositeGifUrl.value = obj.image
-            resolve(obj.image)
-          } else {
-            reject(new Error(obj.error))
-          }
-        },
-      )
+      videoProgress.value = 40
+
+      // Create video canvas and record with MediaRecorder
+      const videoCanvas = document.createElement('canvas')
+      videoCanvas.width = outW
+      videoCanvas.height = outH
+      const videoCtx = videoCanvas.getContext('2d')
+
+      // Pick best supported MIME type
+      const mimeTypes = [
+        'video/mp4;codecs=avc1',
+        'video/mp4',
+        'video/webm;codecs=h264',
+        'video/webm;codecs=vp9',
+        'video/webm;codecs=vp8',
+        'video/webm',
+      ]
+      let chosenMime = ''
+      for (const mime of mimeTypes) {
+        if (MediaRecorder.isTypeSupported(mime)) {
+          chosenMime = mime
+          break
+        }
+      }
+
+      const isMP4 = chosenMime.includes('mp4')
+      const fileExt = isMP4 ? 'mp4' : 'webm'
+      const fps = 10
+      const frameDurationMs = 1000 / fps
+
+      const stream = videoCanvas.captureStream(fps)
+      const recorder = new MediaRecorder(stream, {
+        mimeType: chosenMime || undefined,
+        videoBitsPerSecond: 2_500_000,
+      })
+
+      const chunks = []
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data)
+      }
+
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: chosenMime || 'video/webm' })
+        compileVideoPromise = null
+        resolve({ blob, fileExt })
+      }
+      recorder.onerror = (e) => {
+        compileVideoPromise = null
+        reject(e)
+      }
+
+      recorder.start()
+
+      let frameIdx = 0
+      const totalFrames = repeatedFrames.length
+
+      const drawNext = () => {
+        if (frameIdx >= totalFrames) {
+          // Hold last frame briefly then stop
+          setTimeout(() => recorder.stop(), 200)
+          return
+        }
+        videoCtx.clearRect(0, 0, outW, outH)
+        videoCtx.drawImage(repeatedFrames[frameIdx], 0, 0, outW, outH)
+        videoProgress.value = 40 + Math.round((frameIdx / totalFrames) * 55)
+        frameIdx++
+        setTimeout(drawNext, frameDurationMs)
+      }
+
+      drawNext()
     } catch (err) {
-      isCompositeGenerating.value = false
-      compilePromise = null
+      compileVideoPromise = null
       reject(err)
+    } finally {
+      isVideoGenerating.value = false
     }
   })
 
-  return compilePromise
+  return compileVideoPromise
 }
 
-async function downloadCompositeGif() {
-  isGifDownloadClicked.value = true
+async function downloadCompositeVideo() {
   try {
-    const gifUrl = await compileCompositeGif()
+    const videoData = await compileCompositeVideo()
+    videoProgress.value = 98
+
+    // Download the video
+    const url = URL.createObjectURL(videoData.blob)
     const link = document.createElement('a')
-    link.download = `potobox-live-${Date.now()}.gif`
-    link.href = gifUrl
+    link.download = `momentbox-story-${Date.now()}.${videoData.fileExt}`
+    link.href = url
     link.click()
+    setTimeout(() => URL.revokeObjectURL(url), 5000)
+
+    videoProgress.value = 100
   } catch (err) {
-    console.error('GIF Compilation error details:', err)
-    alert('Gagal mengompilasi GIF: ' + err.message)
+    console.error('Video generation error:', err)
+    alert('Gagal membuat video: ' + err.message)
   } finally {
-    isGifDownloadClicked.value = false
+    videoProgress.value = 0
   }
 }
 
@@ -1188,13 +1217,7 @@ onUnmounted(() => {
           DOWNLOAD FOTO
         </button>
 
-        <button
-          class="btn-3d neo-btn"
-          style="background: #00e5ff; padding: 18px; font-size: 20px"
-          @click="downloadCompositeGif"
-        >
-          {{ isGifDownloadClicked ? 'MENGUNDUH...' : 'DOWNLOAD GIF STRIP' }}
-        </button>
+
 
         <button
           class="btn-3d neo-btn"
@@ -1202,7 +1225,7 @@ onUnmounted(() => {
           :disabled="isVideoGenerating"
           @click="downloadCompositeVideo"
         >
-          {{ isVideoGenerating ? 'MENGEREKAM VIDEO...' : 'DOWNLOAD VIDEO (MP4/STORY)' }}
+          {{ isVideoGenerating ? `MEREKAM VIDEO... ${videoProgress}%` : 'DOWNLOAD VIDEO (MP4/STORY)' }}
         </button>
 
         <button
