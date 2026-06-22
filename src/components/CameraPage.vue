@@ -444,6 +444,10 @@ async function startCapture() {
 async function retakePhoto(index) {
   if (isCapturing.value || cameraError.value) return;
   if (!photosList.value[index]) return;
+
+  // Auto-scroll ke atas (berguna di HP agar layar kembali ke kamera)
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
   clearTimers();
   if (!streamActive.value) {
     await startCamera();
@@ -764,11 +768,11 @@ watch(
             <!-- Finish overlay -->
             <div v-if="isComplete" class="camera-finish-overlay">
               <div class="neo-block finish-popup" style="text-align: center;">
-                <div class="neo-title finish-title" style="margin-bottom: 12px;">
+                <div class="neo-title finish-title" style="margin-bottom: 8px;">
                   Foto Anda sudah siap!
                 </div>
                 <p class="finish-text" style="margin: 0 auto; max-width: 680px;">
-                  Ingin mengganti salah satu foto? Cukup klik foto yang ingin diubah pada pratinjau di sebelah kanan. Jika sudah sesuai, tekan Next untuk melanjutkan.
+                  Ingin mengganti salah satu foto? Klik foto di pratinjau kanan. Jika sudah sesuai, klik Next.
                 </p>
                 <button
                   class="btn-3d neo-btn finish-next"
@@ -919,31 +923,32 @@ watch(
 }
 
 .finish-popup {
-  padding: 28px 30px;
-  max-width: 820px;
+  padding: 16px 20px;
+  max-width: 480px;
   width: 95%;
 }
 
 .finish-title {
-  font-size: 34px;
+  font-size: 22px;
 }
 
 .finish-text {
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: 0.6px;
-  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  margin-top: 4px;
+  line-height: 1.4;
 }
 
 .finish-next {
-  margin-top: 18px;
+  margin-top: 12px;
   background: #00e5ff;
   color: #000;
-  font-size: 20px;
-  padding: 18px 28px;
-  border-radius: 8px;
-  box-shadow: 8px 8px 0 #000;
-  width: 220px;
+  font-size: 16px;
+  padding: 10px 20px;
+  border-radius: 6px;
+  box-shadow: 4px 4px 0 #000;
+  width: 140px;
 }
 
 .frame-preview {

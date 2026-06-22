@@ -1181,11 +1181,11 @@ onUnmounted(() => {
 
     <!-- RIGHT SIDE: CONTROL PANEL -->
     <div class="preview-controls">
-      <header style="text-align: center; margin-bottom: 10px">
+      <header style="text-align: center; margin-bottom: 6px">
         <h1 class="neo-title preview-main-title">
           FOTO STRIP KAMU
         </h1>
-        <div class="neo-chip" style="background: #ffd400; font-size: 14px; font-weight: 900">
+        <div class="neo-chip" style="background: #ffd400; font-size: 13px; font-weight: 900">
           FRAME: {{ selectedFrame.name }}
         </div>
       </header>
@@ -1209,7 +1209,7 @@ onUnmounted(() => {
       </div>
 
       <!-- ACTION BUTTONS -->
-      <div style="display: flex; flex-direction: column; gap: 15px">
+      <div style="display: flex; flex-direction: column; gap: 10px">
         <button
           v-if="visibleButtons.downloadPhoto"
           class="btn-3d neo-btn preview-action-btn"
@@ -1241,7 +1241,7 @@ onUnmounted(() => {
       </div>
 
       <!-- COMMON BUTTONS -->
-      <div style="display: flex; flex-direction: column; gap: 15px; margin-top: -5px">
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-top: -3px">
         <button
           v-if="visibleButtons.changeFrame"
           class="btn-3d neo-btn preview-action-btn"
@@ -1403,7 +1403,8 @@ onUnmounted(() => {
 }
 
 .preview-controls {
-  width: 400px;
+  width: 100%;
+  max-width: 400px;
   background: #f6f1e9;
   border-left: 6px solid #000;
   padding: 40px;
@@ -1488,51 +1489,61 @@ onUnmounted(() => {
 }
 
 /* ===== MOBILE ===== */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .preview-layout {
     flex-direction: column;
-    height: auto;
-    min-height: 100vh;
+    height: 100vh;
     overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .preview-left {
-    padding: 16px;
+    padding: 12px 16px 8px;
     max-height: none;
     flex: none;
+    display: flex;
+    justify-content: center;
+    align-items: center;
   }
 
   .preview-strip-wrapper {
-    height: auto;
-    width: 100%;
-    box-shadow: 6px 6px 0 #000;
+    /* Gunakan tinggi eksplisit agar aspect-ratio berfungsi dan tidak collapse ke 0 */
+    height: 45vh;
+    width: auto;
+    max-width: 100%;
+    /* Biarkan aspect ratio menentukan lebar */
+    margin: 0 auto;
+    box-shadow: 4px 4px 0 #000;
     border-width: 3px;
   }
 
   .preview-controls {
     width: 100%;
+    max-width: none; /* Override max-width desktop agar memenuhi lebar iPad/tablet */
     border-left: none;
-    border-top: 5px solid #000;
-    padding: 20px 16px;
+    border-top: 4px solid #000;
+    padding: 14px 16px 20px;
     max-height: none;
-    gap: 14px;
+    gap: 10px;
     box-shadow: none;
+    flex-shrink: 0;
   }
 
   .preview-main-title {
-    font-size: 32px;
-    text-shadow: 3px 3px 0 #000;
-    margin-bottom: 6px;
+    font-size: 26px;
+    text-shadow: 2px 2px 0 #000;
+    margin-bottom: 4px;
   }
 
   .preview-tabs {
     border-width: 3px;
     box-shadow: 3px 3px 0 #000;
+    margin-bottom: 8px;
   }
 
   .preview-tab-btn {
-    padding: 10px;
-    font-size: 16px;
+    padding: 9px 8px;
+    font-size: 15px;
   }
 
   .preview-tab-btn-right {
@@ -1540,8 +1551,8 @@ onUnmounted(() => {
   }
 
   .preview-action-btn {
-    padding: 14px;
-    font-size: 16px;
+    padding: 12px;
+    font-size: 15px;
   }
 
   .qr-modal-card {
@@ -1554,8 +1565,8 @@ onUnmounted(() => {
   }
 
   .qr-code-container {
-    width: 250px;
-    height: 250px;
+    width: 220px;
+    height: 220px;
     box-shadow: 6px 6px 0 #000;
   }
 }

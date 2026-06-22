@@ -206,7 +206,7 @@ const emit = defineEmits(['start', 'settings']);
 }
 
 /* ===== MOBILE ===== */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .home-card {
     aspect-ratio: unset;
     padding: 30px 20px;

@@ -21,6 +21,7 @@ body {
 .app-root {
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   position: relative;
   overflow: hidden;
 }
@@ -227,6 +228,7 @@ body {
 .camera-layout {
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   display: grid;
   grid-template-columns: 1fr 280px;
   gap: 3vw;
@@ -244,6 +246,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 18px;
 }
 
@@ -298,28 +301,8 @@ body {
   box-shadow: 6px 6px 0 #000000;
 }
 
-/* ========== TABLET (Samsung Tab, iPad, etc) ========== */
-@media (max-width: 1024px) and (min-width: 769px) {
-  .camera-layout {
-    grid-template-columns: 1fr 220px;
-    gap: 2vw;
-    padding: 12px 16px;
-    overflow-y: auto;
-    height: auto;
-    min-height: 100vh;
-  }
-
-  .camera-left {
-    gap: 12px;
-  }
-
-  .preview-panel {
-    max-width: 220px;
-  }
-}
-
-/* ========== MOBILE RESPONSIVE ========== */
-@media (max-width: 768px) {
+/* ========== MOBILE & TABLET RESPONSIVE ========== */
+@media (max-width: 1024px) {
   html,
   body,
   #app {
@@ -330,6 +313,7 @@ body {
     overflow: auto;
     height: auto;
     min-height: 100vh;
+    min-height: 100dvh;
   }
 
   .camera-layout {
@@ -338,6 +322,7 @@ body {
     padding: 16px;
     height: auto;
     min-height: 100vh;
+    min-height: 100dvh;
     overflow: auto;
   }
 
@@ -346,12 +331,13 @@ body {
   }
 
   .preview-panel {
-    max-width: 100%;
+    max-width: 180px; /* Perkecil preview frame di mobile agar tidak memakan layar penuh */
+    margin: 0 auto;
     width: 100%;
-    flex-direction: row;
-    flex-wrap: wrap;
+    flex-direction: column;
     justify-content: center;
-    gap: 10px;
+    align-items: center;
+    gap: 6px;
     padding-bottom: 20px;
   }
 

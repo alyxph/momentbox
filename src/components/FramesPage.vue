@@ -201,7 +201,7 @@ const emit = defineEmits(['select', 'go-home']);
   margin: 0 auto;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .frames-header {
     padding: 10px 14px;
     gap: 10px;
