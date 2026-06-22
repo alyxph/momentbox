@@ -298,3 +298,75 @@ body {
   box-shadow: 6px 6px 0 #000000;
 }
 
+/* ========== TABLET (Samsung Tab, iPad, etc) ========== */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .camera-layout {
+    grid-template-columns: 1fr 220px;
+    gap: 2vw;
+    padding: 12px 16px;
+    overflow-y: auto;
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .camera-left {
+    gap: 12px;
+  }
+
+  .preview-panel {
+    max-width: 220px;
+  }
+}
+
+/* ========== MOBILE RESPONSIVE ========== */
+@media (max-width: 768px) {
+  html,
+  body,
+  #app {
+    overflow: auto;
+  }
+
+  .app-root {
+    overflow: auto;
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .camera-layout {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 16px;
+    height: auto;
+    min-height: 100vh;
+    overflow: auto;
+  }
+
+  .camera-left {
+    gap: 10px;
+  }
+
+  .preview-panel {
+    max-width: 100%;
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    padding-bottom: 20px;
+  }
+
+  .preview-strip {
+    box-shadow: 4px 4px 0 #000000;
+  }
+
+  .neo-block {
+    box-shadow: 5px 5px 0 #000000;
+    border-width: 3px;
+  }
+
+  .neo-btn {
+    box-shadow: 4px 4px 0 #000000;
+    border-width: 3px;
+  }
+}
+

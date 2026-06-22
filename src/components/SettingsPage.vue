@@ -8,6 +8,42 @@ const emit = defineEmits(['go-home', 'save', 'delete']);
 const view = ref('menu'); // 'menu' or 'editor'
 const currentLayoutId = ref(null);
 
+// Settings Tab switcher: 'frames' or 'buttons'
+const activeSettingTab = ref('frames');
+
+// Config toggles for buttons shown in PreviewPage
+const previewButtons = ref({
+  downloadPhoto: true,
+  downloadVideo: true,
+  qrCode: true,
+  changeFrame: true,
+  retake: true,
+  goHome: true,
+});
+
+const buttonSaveStatus = ref('');
+
+const buttonsConfig = [
+  { key: 'downloadPhoto', name: 'DOWNLOAD FOTO', desc: 'Menampilkan tombol untuk mengunduh foto strip hasil akhir.' },
+  { key: 'downloadVideo', name: 'DOWNLOAD VIDEO', desc: 'Menampilkan tombol untuk merekam dan mengunduh video animasi (MP4/Story).' },
+  { key: 'qrCode', name: 'SIMPAN FOTO', desc: 'Menampilkan tombol untuk mengunggah hasil dan membagikannya lewat scan QR Code.' },
+  { key: 'changeFrame', name: 'UBAH FRAME', desc: 'Menampilkan tombol untuk kembali memilih frame lain.' },
+  { key: 'retake', name: 'FOTO ULANG', desc: 'Menampilkan tombol untuk mengulang proses pemotretan.' },
+  { key: 'goHome', name: 'BERANDA', desc: 'Menampilkan tombol untuk kembali ke layar utama.' }
+];
+
+function toggleButton(key) {
+  previewButtons.value[key] = !previewButtons.value[key];
+}
+
+function saveButtonsConfig() {
+  localStorage.setItem('photobooth_preview_buttons', JSON.stringify(previewButtons.value));
+  buttonSaveStatus.value = 'Pengaturan tombol berhasil disimpan!';
+  setTimeout(() => {
+    buttonSaveStatus.value = '';
+  }, 2500);
+}
+
 const canvasRef = ref(null);
 const frameInputRef = ref(null);
 
@@ -291,6 +327,15 @@ function deleteSavedLayout(id) {
 
 onMounted(() => {
   loadLayouts();
+  const savedButtons = localStorage.getItem('photobooth_preview_buttons');
+  if (savedButtons) {
+    try {
+      const parsed = JSON.parse(savedButtons);
+      previewButtons.value = { ...previewButtons.value, ...parsed };
+    } catch (e) {
+      console.error('Failed to load preview buttons config', e);
+    }
+  }
 });
 
 onUnmounted(() => {
@@ -324,20 +369,42 @@ onUnmounted(() => {
           SETTINGS
         </h1>
         <p class="neo-chip" style="font-size: 12px; font-weight: 800; display: inline-block; margin-top: 8px; background: #00e5ff; color: #000; padding: 6px 14px;">
-          {{ view === 'menu' ? 'MANAGE CUSTOM FRAMES' : 'EDITING: ' + customDisplayName }}
+          {{ view === 'menu' ? (activeSettingTab === 'frames' ? 'MANAGE CUSTOM FRAMES' : 'CUSTOM BUTTONS') : 'EDITING: ' + customDisplayName }}
         </p>
       </header>
 
+      <!-- Tab Switcher (only in menu view) -->
+      <div v-if="view === 'menu'" style="display: flex; gap: 16px; justify-content: center; margin-top: 4px; flex-shrink: 0;">
+        <button
+          class="btn-3d neo-btn"
+          style="padding: 10px 24px; font-size: 14px; font-weight: 800; border: 3px solid #000; box-shadow: 4px 4px 0 #000;"
+          :style="{ background: activeSettingTab === 'frames' ? '#ff4cb0' : '#fff', color: activeSettingTab === 'frames' ? '#fff' : '#000' }"
+          @click="activeSettingTab = 'frames'"
+        >
+          FRAME CUSTOM
+        </button>
+        <button
+          class="btn-3d neo-btn"
+          style="padding: 10px 24px; font-size: 14px; font-weight: 800; border: 3px solid #000; box-shadow: 4px 4px 0 #000;"
+          :style="{ background: activeSettingTab === 'buttons' ? '#ffd700' : '#fff', color: '#000' }"
+          @click="activeSettingTab = 'buttons'"
+        >
+          KUSTOMISASI TOMBOL
+        </button>
+      </div>
+
       <!-- MENU VIEW -->
       <div v-if="view === 'menu'" style="flex: 1; overflow-y: auto; padding: 20px 0;">
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px;">
+
+        <!-- FRAMES TAB CONTENT -->
+        <div v-if="activeSettingTab === 'frames'" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px;">
           <!-- ADD NEW CARD -->
           <div 
             class="neo-block btn-3d" 
             style="background: #ffffff; padding: 30px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; border-style: dashed; min-height: 200px;"
             @click="startNewLayout"
           >
-            <div style="font-size: 48px; margin-bottom: 12px;">➕</div>
+            <div style="width: 24px; height: 24px; border: 3px dashed #000; margin-bottom: 16px;"></div>
             <h3 class="neo-title" style="font-size: 20px; margin: 0;">TAMBAH FRAME</h3>
             <p style="font-size: 12px; font-weight: 800; color: #888; margin-top: 8px;">BUAT LAYOUT BARU</p>
           </div>
@@ -351,7 +418,7 @@ onUnmounted(() => {
           >
             <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #f8fafc; border: 3px solid #000; margin-bottom: 12px; overflow: hidden; position: relative;">
                <img v-if="layout.frameUrl" :src="layout.frameUrl" style="max-height: 120px; width: auto; object-fit: contain;" />
-               <div v-else style="font-size: 32px;">🖼️</div>
+               <div v-else style="font-size: 32px; font-weight: 800; color: #888;">NO IMAGE</div>
             </div>
             <h3 class="neo-title" style="font-size: 18px; margin: 0; text-align: center;">{{ layout.name }}</h3>
             <div style="display: flex; gap: 8px; margin-top: 16px;">
@@ -368,6 +435,45 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
+
+        <!-- BUTTONS TAB CONTENT -->
+        <div v-else-if="activeSettingTab === 'buttons'" style="display: flex; flex-direction: column; gap: 16px; max-width: 650px; margin: 0 auto; width: 100%;">
+          <div
+            v-for="btn in buttonsConfig"
+            :key="btn.key"
+            class="neo-block"
+            style="background: #ffffff; padding: 20px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; border: 4px solid #000; box-shadow: 6px 6px 0 #000;"
+            @click="toggleButton(btn.key)"
+          >
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <div style="text-align: left;">
+                <h3 class="neo-title" style="font-size: 18px; margin: 0;">{{ btn.name }}</h3>
+                <p style="font-size: 12px; color: #555; margin: 4px 0 0 0; font-weight: 700;">{{ btn.desc }}</p>
+              </div>
+            </div>
+            <!-- Neo-brutalist Checkbox -->
+            <div
+              style="width: 32px; height: 32px; border: 4px solid #000; box-shadow: 3px 3px 0 #000; display: flex; align-items: center; justify-content: center; transition: all 0.1s; flex-shrink: 0;"
+              :style="{ background: previewButtons[btn.key] ? '#00e5ff' : '#fff' }"
+            >
+              <span v-if="previewButtons[btn.key]" style="font-size: 18px; font-weight: 900; color: #000;">✓</span>
+            </div>
+          </div>
+
+          <div style="margin-top: 15px; display: flex; flex-direction: column; align-items: center; gap: 10px;">
+            <button
+              class="btn-3d neo-btn"
+              style="background: #ff4cb0; color: #fff; padding: 14px 40px; font-size: 18px; font-weight: 800; border: 4px solid #000; box-shadow: 6px 6px 0 #000;"
+              @click="saveButtonsConfig"
+            >
+              SIMPAN PENGATURAN
+            </button>
+            <p v-if="buttonSaveStatus" style="font-size: 14px; font-weight: 900; color: #10b981; text-align: center; margin-top: 5px;">
+              {{ buttonSaveStatus }}
+            </p>
+          </div>
+        </div>
+
       </div>
 
       <!-- EDITOR VIEW -->

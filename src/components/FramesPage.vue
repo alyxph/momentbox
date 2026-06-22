@@ -37,41 +37,28 @@ const emit = defineEmits(['select', 'go-home']);
 </script>
 
 <template>
-  <div class="checkerboard" style="width: 100%; height: 100%; overflow-y: auto; background-color: #f6f1e9;">
+  <div class="checkerboard frames-page">
     <!-- Header -->
-    <div
-      style="background: #ff4cb0; padding: 14px 20px; border-bottom: 5px solid #000;
-        display: flex; align-items: center; justify-content: flex-start; gap: 16px; position: sticky; top: 0;
-        z-index: 20; box-shadow: 0 4px 0 #000;"
-    >
+    <div class="frames-header">
       <button
-        class="btn-3d"
-        style="background: #000; color: white; border: 4px solid #000; width: 44px; height: 44px; font-size: 20px;
-          cursor: pointer; font-weight: 900; display: flex; align-items: center;
-          justify-content: center; flex-shrink: 0; box-shadow: 4px 4px 0 #ff4cb0;"
+        class="btn-3d frames-back-btn"
         @click="emit('go-home')"
       >
         ✕
       </button>
 
       <div>
-        <h2
-          style="font-family: 'Bangers', cursive; font-size: 28px; color: white; letter-spacing: 2px;
-            text-shadow: 2px 2px 0 #000; margin: 0;"
-        >
+        <h2 class="frames-header-title">
           🎨 PILIH FRAME TEMA
         </h2>
-        <p style="color: #ffe0f0; font-size: 11px; font-weight: 700; letter-spacing: 2px; margin: 0;">
+        <p class="frames-header-sub">
           TENTUKAN TAMPILAN FOTO STRIP KAMU
         </p>
       </div>
     </div>
 
     <!-- Grid -->
-    <div
-      style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 24px;
-        padding: 30px; max-width: 1200px; margin: 0 auto;"
-    >
+    <div class="frames-grid">
       <div
         v-for="frame in allFrames"
         :key="frame.id"
@@ -149,3 +136,97 @@ const emit = defineEmits(['select', 'go-home']);
     </div>
   </div>
 </template>
+
+<style scoped>
+.frames-page {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  background-color: #f6f1e9;
+}
+
+.frames-header {
+  background: #ff4cb0;
+  padding: 14px 20px;
+  border-bottom: 5px solid #000;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  box-shadow: 0 4px 0 #000;
+}
+
+.frames-back-btn {
+  background: #000;
+  color: white;
+  border: 4px solid #000;
+  width: 44px;
+  height: 44px;
+  font-size: 20px;
+  cursor: pointer;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 4px 4px 0 #ff4cb0;
+}
+
+.frames-header-title {
+  font-family: 'Bangers', cursive;
+  font-size: 28px;
+  color: white;
+  letter-spacing: 2px;
+  text-shadow: 2px 2px 0 #000;
+  margin: 0;
+}
+
+.frames-header-sub {
+  color: #ffe0f0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  margin: 0;
+}
+
+.frames-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 24px;
+  padding: 30px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+@media (max-width: 768px) {
+  .frames-header {
+    padding: 10px 14px;
+    gap: 10px;
+  }
+
+  .frames-back-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+    border-width: 3px;
+  }
+
+  .frames-header-title {
+    font-size: 20px;
+  }
+
+  .frames-header-sub {
+    font-size: 9px;
+    letter-spacing: 1px;
+  }
+
+  .frames-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 14px;
+    padding: 16px;
+  }
+}
+</style>

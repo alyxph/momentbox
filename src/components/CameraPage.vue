@@ -122,22 +122,40 @@ function retakeBoxStyle(box) {
 
 async function startCamera() {
   cameraError.value = '';
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 1920 }, height: { ideal: 1080 }, facingMode: 'user' },
-      audio: false,
-    });
-    streamActive.value = true;
-    await nextTick();
-    if (videoEl.value) {
-      videoEl.value.srcObject = stream;
-      await videoEl.value.play();
+  // Try progressively simpler constraints for broader device compatibility
+  // (Samsung Browser on Android 10 can reject complex constraint objects)
+  const constraintsList = [
+    { video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }, audio: false },
+    { video: { facingMode: 'user' }, audio: false },
+    { video: true, audio: false },
+  ];
+  for (const constraints of constraintsList) {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+      streamActive.value = true;
+      await nextTick();
+      if (videoEl.value) {
+        videoEl.value.srcObject = stream;
+        // Samsung Browser sometimes needs explicit play() after srcObject assignment
+        try {
+          await videoEl.value.play();
+        } catch (playErr) {
+          console.warn('video.play() error (may auto-play):', playErr);
+        }
+      }
+      return; // success
+    } catch (e) {
+      console.warn('getUserMedia failed with constraints', constraints, e);
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+        stream = null;
+      }
     }
-  } catch (e) {
-    stream = null;
-    streamActive.value = false;
-    cameraError.value = 'Tidak dapat mengakses kamera. Izinkan akses kamera di browser kamu.';
   }
+  // All attempts failed
+  stream = null;
+  streamActive.value = false;
+  cameraError.value = 'Tidak dapat mengakses kamera. Izinkan akses kamera di browser kamu.';
 }
 
 function stopCamera() {
@@ -176,32 +194,65 @@ function goHome() {
 function captureGifFrame() {
   const video = videoEl.value;
   if (!video) return null;
+  // Guard: video must have valid dimensions (not ready yet on some Android browsers)
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  if (!vw || !vh) return null;
 
-  const canvas = document.createElement('canvas');
-  const vw = video.videoWidth || 640;
-  const vh = video.videoHeight || 480;
-
-  // Downscale size (width 400px, adjust height according to aspect ratio)
-  const targetW = 400;
+  // Frame disimpan di 360px — kualitas cukup bagus untuk video compilation.
+  // Gifshot akan menerima versi 240px yang di-downsample terpisah (lihat generateGifForIndex).
+  const targetW = 360;
   const targetH = Math.round((vh / vw) * targetW);
+  if (!targetH) return null;
 
-  canvas.width = targetW;
-  canvas.height = targetH;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = targetW;
+    canvas.height = targetH;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    // Mirror to match preview
+    ctx.translate(targetW, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, 0, 0, targetW, targetH);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    return canvas.toDataURL('image/jpeg', 0.82);
+  } catch (e) {
+    console.warn('captureGifFrame error:', e);
+    return null;
+  }
+}
 
-  const ctx = canvas.getContext('2d');
-  // Mirroring
-  ctx.translate(targetW, 0);
-  ctx.scale(-1, 1);
-  ctx.drawImage(video, 0, 0, targetW, targetH);
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-
-  return canvas.toDataURL('image/jpeg', 0.8);
+// Helper: downsample sebuah dataURL image ke lebar targetW menggunakan canvas
+function downsampleDataURL(src, targetW) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const targetH = img.naturalWidth
+        ? Math.round((img.naturalHeight / img.naturalWidth) * targetW)
+        : Math.round(targetW * 0.75);
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { resolve(src); return; }
+        ctx.drawImage(img, 0, 0, targetW, targetH);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      } catch (e) {
+        resolve(src); // fallback: gunakan sumber asli
+      }
+    };
+    img.onerror = () => resolve(src);
+    img.src = src;
+  });
 }
 
 function generateGifForIndex(index, frameArray) {
   if (!frameArray || frameArray.length === 0) return;
 
   // Save the raw captured frames array for composite strip compilation
+  // (frame 360px tetap disimpan agar video terlihat bagus)
   const updatedFrames = [...capturedFramesList.value];
   updatedFrames[index] = frameArray;
   capturedFramesList.value = updatedFrames;
@@ -211,43 +262,76 @@ function generateGifForIndex(index, frameArray) {
   updatedGifs[index] = 'loading';
   gifsList.value = updatedGifs;
 
-  // Use Yahoo's gifshot from window.gifshot
+  // Helper: apply last-frame fallback
+  const applyFallback = () => {
+    const fallback = [...gifsList.value];
+    fallback[index] = frameArray[frameArray.length - 1] || frameArray[0];
+    gifsList.value = fallback;
+  };
+
   const gifshotLib = window.gifshot;
   if (!gifshotLib) {
-    console.error('gifshot library not loaded');
-    const fallbackGifs = [...gifsList.value];
-    fallbackGifs[index] = frameArray[frameArray.length - 1]; // fallback to last frame
-    gifsList.value = fallbackGifs;
+    console.warn('gifshot library not loaded, using static fallback');
+    applyFallback();
     return;
   }
 
-  const img = new Image();
-  img.onload = () => {
-    const targetW = 400;
-    const targetH = img.naturalWidth ? Math.round((img.naturalHeight / img.naturalWidth) * targetW) : 300;
+  // Ambil 22 frame merata dari rekaman (animasi halus)
+  const MAX_FRAMES = 22;
+  let sampledFrames = frameArray.filter(f => !!f);
+  if (sampledFrames.length > MAX_FRAMES) {
+    const step = frameArray.length / MAX_FRAMES;
+    sampledFrames = Array.from({ length: MAX_FRAMES }, (_, i) =>
+      frameArray[Math.min(Math.round(i * step), frameArray.length - 1)]
+    ).filter(f => !!f);
+  }
 
-    gifshotLib.createGIF({
-      images: frameArray,
-      gifWidth: targetW,
-      gifHeight: targetH,
-      interval: 0.1, // 10 fps (100ms per frame)
-      numFrames: frameArray.length,
-      frameDuration: 1,
-      sampleInterval: 10,
-    }, (obj) => {
-      if (!obj.error) {
-        const updated = [...gifsList.value];
-        updated[index] = obj.image; // base64 gif
-        gifsList.value = updated;
-      } else {
-        console.error('Failed to create GIF:', obj.error);
-        const fallback = [...gifsList.value];
-        fallback[index] = frameArray[frameArray.length - 1]; // fallback to last frame
-        gifsList.value = fallback;
-      }
+  if (sampledFrames.length === 0) {
+    applyFallback();
+    return;
+  }
+
+  // Downsample ke 240px KHUSUS untuk gifshot (hemat memori saat quantize)
+  // Frame asli 360px tetap tersimpan di capturedFrames untuk video.
+  const GIF_W = 240;
+  Promise.all(sampledFrames.map(f => downsampleDataURL(f, GIF_W))).then(smallFrames => {
+    const firstFrame = smallFrames.find(f => !!f);
+    if (!firstFrame) { applyFallback(); return; }
+
+    const img = new Image();
+    img.onload = () => {
+      const gifW = GIF_W;
+      const gifH = img.naturalWidth
+        ? Math.round((img.naturalHeight / img.naturalWidth) * gifW)
+        : 180;
+
+      try {
+        gifshotLib.createGIF({
+          images: smallFrames,
+          gifWidth: gifW,
+          gifHeight: gifH,
+          interval: 0.15,
+          numFrames: smallFrames.length,
+          frameDuration: 1,
+          sampleInterval: 10,
+          }, (obj) => {
+            if (!obj.error && obj.image) {
+              const updated = [...gifsList.value];
+              updated[index] = obj.image;
+              gifsList.value = updated;
+            } else {
+              console.warn('gifshot createGIF error:', obj.error);
+              applyFallback();
+            }
+          });
+        } catch (e) {
+          console.error('gifshot threw exception:', e);
+          applyFallback();
+        }
+      };
+      img.onerror = () => applyFallback();
+      img.src = firstFrame;
     });
-  };
-  img.src = frameArray[0];
 }
 
 function capturePhoto(targetIndex = null) {
@@ -621,6 +705,7 @@ watch(
               ref="videoEl"
               autoplay
               playsinline
+              muted
               class="video-mirror"
               style="width: 100%; height: auto; min-height: 300px; max-height: 72vh; object-fit: cover; display: block;"
             ></video>
@@ -651,7 +736,7 @@ watch(
             <div
               v-if="countdown > 0"
               style="position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); display: flex;
-                align-items: center; justify-content: center;"
+                align-items: center; justify-content: center; z-index: 4;"
             >
               <div
                 :key="countdown"
@@ -667,7 +752,7 @@ watch(
             <div
               v-if="showSmile"
               style="position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
-                background: #00e5ff; padding: 8px 22px; border: 3px solid #000;"
+                background: #00e5ff; padding: 8px 22px; border: 3px solid #000; z-index: 4;"
             >
               <span
                 style="font-family: 'Bangers', cursive; font-size: 22px; color: #000; letter-spacing: 2px;"
@@ -898,4 +983,6 @@ watch(
   align-items: center;
   justify-content: center;
 }
+
+
 </style>

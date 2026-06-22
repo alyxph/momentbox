@@ -44,6 +44,15 @@ const videoProgress = ref(0)
 const canvasWidth = ref(0)
 const canvasHeight = ref(0)
 
+const visibleButtons = ref({
+  downloadPhoto: true,
+  downloadVideo: true,
+  qrCode: true,
+  changeFrame: true,
+  retake: true,
+  goHome: true,
+})
+
 function updateCanvasSize() {
   const canvas = canvasRef.value
   if (canvas) {
@@ -711,74 +720,134 @@ function compileCompositeVideo() {
 
       videoProgress.value = 40
 
-      // Create video canvas and record with MediaRecorder
-      const videoCanvas = document.createElement('canvas')
-      videoCanvas.width = outW
-      videoCanvas.height = outH
-      const videoCtx = videoCanvas.getContext('2d')
+      // Check if MediaRecorder + captureStream are supported
+      const supportsMediaRecorder = typeof MediaRecorder !== 'undefined'
+      const supportsCapture = typeof HTMLCanvasElement.prototype.captureStream === 'function'
+        || typeof HTMLCanvasElement.prototype.mozCaptureStream === 'function'
 
-      // Pick best supported MIME type
-      const mimeTypes = [
-        'video/mp4;codecs=avc1',
-        'video/mp4',
-        'video/webm;codecs=h264',
-        'video/webm;codecs=vp9',
-        'video/webm;codecs=vp8',
-        'video/webm',
-      ]
-      let chosenMime = ''
-      for (const mime of mimeTypes) {
-        if (MediaRecorder.isTypeSupported(mime)) {
-          chosenMime = mime
-          break
+      // Try video recording path
+      if (supportsMediaRecorder && supportsCapture) {
+        try {
+          // Create video canvas and record with MediaRecorder
+          const videoCanvas = document.createElement('canvas')
+          videoCanvas.width = outW
+          videoCanvas.height = outH
+          const videoCtx = videoCanvas.getContext('2d')
+
+          // Pick best supported MIME type — prioritise mp4 for mobile / IG Story compatibility
+          const mimeTypes = [
+            'video/mp4;codecs=avc1',
+            'video/mp4;codecs=h264',
+            'video/mp4',
+            'video/webm;codecs=vp9',
+            'video/webm;codecs=vp8',
+            'video/webm',
+          ]
+          let chosenMime = ''
+          for (const mime of mimeTypes) {
+            if (MediaRecorder.isTypeSupported(mime)) {
+              chosenMime = mime
+              break
+            }
+          }
+
+          if (!chosenMime) {
+            throw new Error('No supported MIME type for MediaRecorder')
+          }
+
+          const isMP4 = chosenMime.includes('mp4')
+          const fileExt = isMP4 ? 'mp4' : 'webm'
+          const fps = 10
+          const frameDurationMs = 1000 / fps
+
+          const captureStreamFn = videoCanvas.captureStream?.bind(videoCanvas)
+            || videoCanvas.mozCaptureStream?.bind(videoCanvas)
+          const stream = captureStreamFn(fps)
+          const recorder = new MediaRecorder(stream, {
+            mimeType: chosenMime,
+            videoBitsPerSecond: 2_000_000,
+          })
+
+          const chunks = []
+          recorder.ondataavailable = (e) => {
+            if (e.data.size > 0) chunks.push(e.data)
+          }
+
+          await new Promise((res, rej) => {
+            recorder.onstop = () => {
+              const blob = new Blob(chunks, { type: chosenMime })
+              compileVideoPromise = null
+              resolve({ blob, fileExt })
+              res()
+            }
+            recorder.onerror = (e) => {
+              rej(e)
+            }
+
+            recorder.start()
+
+            let frameIdx = 0
+            const totalFrames = repeatedFrames.length
+
+            const drawNext = () => {
+              if (frameIdx >= totalFrames) {
+                setTimeout(() => recorder.stop(), 200)
+                return
+              }
+              videoCtx.clearRect(0, 0, outW, outH)
+              videoCtx.drawImage(repeatedFrames[frameIdx], 0, 0, outW, outH)
+              videoProgress.value = 40 + Math.round((frameIdx / totalFrames) * 55)
+              frameIdx++
+              setTimeout(drawNext, frameDurationMs)
+            }
+
+            drawNext()
+          })
+
+          return // success via video path
+        } catch (videoErr) {
+          console.warn('MediaRecorder path failed, falling back to GIF:', videoErr)
+          // Fall through to GIF fallback
         }
       }
 
-      const isMP4 = chosenMime.includes('mp4')
-      const fileExt = isMP4 ? 'mp4' : 'webm'
-      const fps = 10
-      const frameDurationMs = 1000 / fps
+      // ---- GIF Fallback (for Samsung Browser / Android 10 and other incompatible devices) ----
+      videoProgress.value = 45
+      const gifshotLib = window.gifshot
+      if (!gifshotLib) {
+        throw new Error('Perangkat ini tidak mendukung pembuatan video dan library GIF tidak tersedia.')
+      }
 
-      const stream = videoCanvas.captureStream(fps)
-      const recorder = new MediaRecorder(stream, {
-        mimeType: chosenMime || undefined,
-        videoBitsPerSecond: 2_500_000,
+      // Sample frames evenly – keep max 20 for GIF to avoid OOM
+      const MAX_GIF_FRAMES = 20
+      const step = Math.max(1, Math.floor(uniqueFrameDataURLs.length / MAX_GIF_FRAMES))
+      const gifFrames = uniqueFrameDataURLs.filter((_, i) => i % step === 0).slice(0, MAX_GIF_FRAMES)
+
+      videoProgress.value = 50
+
+      await new Promise((res, rej) => {
+        gifshotLib.createGIF({
+          images: gifFrames,
+          gifWidth: outW,
+          gifHeight: outH,
+          interval: 0.12,
+          numFrames: gifFrames.length,
+          frameDuration: 1,
+          sampleInterval: 15,
+        }, (obj) => {
+          videoProgress.value = 95
+          if (!obj.error && obj.image) {
+            // Convert base64 GIF to blob
+            const blob = dataURLtoBlob(obj.image)
+            compileVideoPromise = null
+            resolve({ blob, fileExt: 'gif' })
+            res()
+          } else {
+            rej(new Error(obj.error || 'GIF creation failed'))
+          }
+        })
       })
 
-      const chunks = []
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data)
-      }
-
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: chosenMime || 'video/webm' })
-        compileVideoPromise = null
-        resolve({ blob, fileExt })
-      }
-      recorder.onerror = (e) => {
-        compileVideoPromise = null
-        reject(e)
-      }
-
-      recorder.start()
-
-      let frameIdx = 0
-      const totalFrames = repeatedFrames.length
-
-      const drawNext = () => {
-        if (frameIdx >= totalFrames) {
-          // Hold last frame briefly then stop
-          setTimeout(() => recorder.stop(), 200)
-          return
-        }
-        videoCtx.clearRect(0, 0, outW, outH)
-        videoCtx.drawImage(repeatedFrames[frameIdx], 0, 0, outW, outH)
-        videoProgress.value = 40 + Math.round((frameIdx / totalFrames) * 55)
-        frameIdx++
-        setTimeout(drawNext, frameDurationMs)
-      }
-
-      drawNext()
     } catch (err) {
       compileVideoPromise = null
       reject(err)
@@ -826,6 +895,15 @@ function dataURLtoBlob(dataurl) {
 
 
 onMounted(() => {
+  const savedButtons = localStorage.getItem('photobooth_preview_buttons')
+  if (savedButtons) {
+    try {
+      const parsed = JSON.parse(savedButtons)
+      visibleButtons.value = { ...visibleButtons.value, ...parsed }
+    } catch (e) {
+      console.error('Failed to parse preview buttons settings', e)
+    }
+  }
   setTimeout(async () => {
     await drawStrip()
     // Allow small delay for canvas DOM width/height rendering
@@ -844,39 +922,16 @@ onUnmounted(() => {
 
 <template>
   <div
-    class="checkerboard"
-    style="width: 100vw; height: 100vh; overflow: hidden; display: flex; box-sizing: border-box"
+    class="checkerboard preview-layout"
   >
     <!-- LEFT SIDE: PREVIEW PANEL -->
-    <div
-      style="
-        flex: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 40px;
-        position: relative;
-        max-height: 100%;
-        overflow: hidden;
-        box-sizing: border-box;
-      "
-    >
+    <div class="preview-left">
       <!-- Shared Wrapper for both Photo and GIF strip to guarantee identical sizing -->
       <div
         :style="{
           aspectRatio: (previewBase.baseW * 2) + '/' + previewBase.baseH
         }"
-        style="
-          height: 100%;
-          width: auto;
-          max-width: 100%;
-          max-height: 100%;
-          background: #fff;
-          box-shadow: 10px 10px 0 #000;
-          border: 4px solid #000;
-          box-sizing: border-box;
-          position: relative;
-        "
+        class="preview-strip-wrapper"
       >
         <!-- Canvas for Static Photo -->
         <canvas
@@ -1125,33 +1180,9 @@ onUnmounted(() => {
     </div>
 
     <!-- RIGHT SIDE: CONTROL PANEL -->
-    <div
-      style="
-        width: 400px;
-        background: #f6f1e9;
-        border-left: 6px solid #000;
-        padding: 40px;
-        display: flex;
-        flex-direction: column;
-        gap: 20px;
-        box-shadow: -10px 0 30px rgba(0, 0, 0, 0.1);
-        z-index: 10;
-        overflow-y: auto;
-        max-height: 100vh;
-        box-sizing: border-box;
-      "
-    >
+    <div class="preview-controls">
       <header style="text-align: center; margin-bottom: 10px">
-        <h1
-          class="neo-title"
-          style="
-            font-size: 48px;
-            color: #ff4cb0;
-            text-shadow: 4px 4px 0 #000;
-            margin-bottom: 10px;
-            line-height: 0.9;
-          "
-        >
+        <h1 class="neo-title preview-main-title">
           FOTO STRIP KAMU
         </h1>
         <div class="neo-chip" style="background: #ffd400; font-size: 14px; font-weight: 900">
@@ -1160,48 +1191,18 @@ onUnmounted(() => {
       </header>
 
       <!-- TAB CONTROLLER -->
-      <div
-        style="
-          display: flex;
-          border: 4px solid #000;
-          margin-bottom: 10px;
-          background: #fff;
-          box-shadow: 4px 4px 0 #000;
-          flex-shrink: 0;
-        "
-      >
+      <div class="preview-tabs">
         <button
           @click="activeTab = 'photo'"
           :style="{ background: activeTab === 'photo' ? '#00e5ff' : '#fff' }"
-          style="
-            flex: 1;
-            padding: 12px;
-            font-family: 'Bangers', cursive;
-            font-size: 20px;
-            border: none;
-            cursor: pointer;
-            outline: none;
-            transition: background 0.2s;
-          "
+          class="preview-tab-btn"
         >
           PHOTO STRIP
         </button>
         <button
           @click="activeTab = 'gif'"
           :style="{ background: activeTab === 'gif' ? '#00e5ff' : '#fff' }"
-          style="
-            flex: 1;
-            padding: 12px;
-            font-family: 'Bangers', cursive;
-            font-size: 20px;
-            border-left: 4px solid #000;
-            border-top: none;
-            border-bottom: none;
-            border-right: none;
-            cursor: pointer;
-            outline: none;
-            transition: background 0.2s;
-          "
+          class="preview-tab-btn preview-tab-btn-right"
         >
           LIVE GIFS
         </button>
@@ -1210,18 +1211,18 @@ onUnmounted(() => {
       <!-- ACTION BUTTONS -->
       <div style="display: flex; flex-direction: column; gap: 15px">
         <button
-          class="btn-3d neo-btn"
-          style="background: #00e5ff; padding: 18px; font-size: 20px"
+          v-if="visibleButtons.downloadPhoto"
+          class="btn-3d neo-btn preview-action-btn"
+          style="background: #00e5ff"
           @click="downloadImage"
         >
           DOWNLOAD FOTO
         </button>
 
-
-
         <button
-          class="btn-3d neo-btn"
-          style="background: #a855f7; color: white; padding: 18px; font-size: 20px"
+          v-if="visibleButtons.downloadVideo"
+          class="btn-3d neo-btn preview-action-btn"
+          style="background: #a855f7; color: white"
           :disabled="isVideoGenerating"
           @click="downloadCompositeVideo"
         >
@@ -1229,47 +1230,38 @@ onUnmounted(() => {
         </button>
 
         <button
-          class="btn-3d neo-btn"
-          style="background: #ffd400; padding: 18px; font-size: 20px"
+          v-if="visibleButtons.qrCode"
+          class="btn-3d neo-btn preview-action-btn"
+          style="background: #ffd400"
           :disabled="isUploading"
           @click="generateUnifiedQrCode"
         >
-          {{ isUploading ? 'MENGUNGGAH...' : 'QR CODE' }}
+          {{ isUploading ? 'MENGUNGGAH...' : 'SIMPAN FOTO' }}
         </button>
       </div>
 
       <!-- COMMON BUTTONS -->
-      <div
-        style="
-          display: flex;
-          flex-direction: column;
-          gap: 15px;
-          margin-top: -5px;
-        "
-      >
+      <div style="display: flex; flex-direction: column; gap: 15px; margin-top: -5px">
         <button
-          class="btn-3d neo-btn"
-          style="background: #a855f7; color: white; padding: 18px; font-size: 20px"
+          v-if="visibleButtons.changeFrame"
+          class="btn-3d neo-btn preview-action-btn"
+          style="background: #a855f7; color: white"
           @click="emit('change-frame')"
         >
           UBAH FRAME
         </button>
         <button
-          class="btn-3d neo-btn"
-          style="background: #ff4cb0; color: white; padding: 18px; font-size: 20px"
+          v-if="visibleButtons.retake"
+          class="btn-3d neo-btn preview-action-btn"
+          style="background: #ff4cb0; color: white"
           @click="emit('retake')"
         >
           FOTO ULANG
         </button>
         <button
-          class="btn-3d neo-btn"
-          style="
-            background: #fff;
-            color: #000;
-            padding: 18px;
-            font-size: 20px;
-            border: 4px solid #000;
-          "
+          v-if="visibleButtons.goHome"
+          class="btn-3d neo-btn preview-action-btn"
+          style="background: #fff; color: #000; border: 4px solid #000"
           @click="emit('go-home')"
         >
           BERANDA
@@ -1280,28 +1272,9 @@ onUnmounted(() => {
     <!-- QR Modal -->
     <div
       v-if="showQrModal"
-      style="
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.85);
-        z-index: 100;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        backdrop-filter: blur(8px);
-      "
+      class="qr-modal-overlay"
     >
-      <div
-        class="neo-block bounce-in"
-        style="
-          background: white;
-          padding: 40px;
-          text-align: center;
-          max-width: 450px;
-          width: 90%;
-          position: relative;
-        "
-      >
+      <div class="neo-block bounce-in qr-modal-card">
         <button
           @click="showQrModal = false"
           style="
@@ -1318,20 +1291,7 @@ onUnmounted(() => {
           ✕
         </button>
         <h2 class="neo-title" style="font-size: 32px; margin-bottom: 20px">UNDUH FOTO DISINI</h2>
-        <div
-          style="
-            width: 350px;
-            height: 350px;
-            background: #fff;
-            margin: 0 auto;
-            border: 4px solid #000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            box-shadow: 10px 10px 0 #000;
-          "
-        >
+        <div class="qr-code-container">
           <div
             v-if="!qrUrl"
             style="display: flex; flex-direction: column; align-items: center; gap: 15px"
@@ -1407,5 +1367,196 @@ onUnmounted(() => {
   border-top-color: transparent;
   border-radius: 50%;
   animation: spin 1s linear infinite;
+}
+
+/* ===== LAYOUT ===== */
+.preview-layout {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  box-sizing: border-box;
+}
+
+.preview-left {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  position: relative;
+  max-height: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.preview-strip-wrapper {
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+  max-height: 100%;
+  background: #fff;
+  box-shadow: 10px 10px 0 #000;
+  border: 4px solid #000;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.preview-controls {
+  width: 400px;
+  background: #f6f1e9;
+  border-left: 6px solid #000;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+  overflow-y: auto;
+  max-height: 100vh;
+  box-sizing: border-box;
+}
+
+.preview-main-title {
+  font-size: 48px;
+  color: #ff4cb0;
+  text-shadow: 4px 4px 0 #000;
+  margin-bottom: 10px;
+  line-height: 0.9;
+}
+
+.preview-tabs {
+  display: flex;
+  border: 4px solid #000;
+  margin-bottom: 10px;
+  background: #fff;
+  box-shadow: 4px 4px 0 #000;
+  flex-shrink: 0;
+}
+
+.preview-tab-btn {
+  flex: 1;
+  padding: 12px;
+  font-family: 'Bangers', cursive;
+  font-size: 20px;
+  border: none;
+  cursor: pointer;
+  outline: none;
+  transition: background 0.2s;
+}
+
+.preview-tab-btn-right {
+  border-left: 4px solid #000;
+}
+
+.preview-action-btn {
+  padding: 18px;
+  font-size: 20px;
+}
+
+.qr-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+}
+
+.qr-modal-card {
+  background: white;
+  padding: 40px;
+  text-align: center;
+  max-width: 450px;
+  width: 90%;
+  position: relative;
+}
+
+.qr-code-container {
+  width: 350px;
+  height: 350px;
+  background: #fff;
+  margin: 0 auto;
+  border: 4px solid #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-shadow: 10px 10px 0 #000;
+}
+
+/* ===== MOBILE ===== */
+@media (max-width: 768px) {
+  .preview-layout {
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+    overflow-y: auto;
+  }
+
+  .preview-left {
+    padding: 16px;
+    max-height: none;
+    flex: none;
+  }
+
+  .preview-strip-wrapper {
+    height: auto;
+    width: 100%;
+    box-shadow: 6px 6px 0 #000;
+    border-width: 3px;
+  }
+
+  .preview-controls {
+    width: 100%;
+    border-left: none;
+    border-top: 5px solid #000;
+    padding: 20px 16px;
+    max-height: none;
+    gap: 14px;
+    box-shadow: none;
+  }
+
+  .preview-main-title {
+    font-size: 32px;
+    text-shadow: 3px 3px 0 #000;
+    margin-bottom: 6px;
+  }
+
+  .preview-tabs {
+    border-width: 3px;
+    box-shadow: 3px 3px 0 #000;
+  }
+
+  .preview-tab-btn {
+    padding: 10px;
+    font-size: 16px;
+  }
+
+  .preview-tab-btn-right {
+    border-left-width: 3px;
+  }
+
+  .preview-action-btn {
+    padding: 14px;
+    font-size: 16px;
+  }
+
+  .qr-modal-card {
+    padding: 24px 16px;
+    max-width: 92vw;
+  }
+
+  .qr-modal-card h2 {
+    font-size: 24px !important;
+  }
+
+  .qr-code-container {
+    width: 250px;
+    height: 250px;
+    box-shadow: 6px 6px 0 #000;
+  }
 }
 </style>
