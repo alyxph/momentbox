@@ -241,7 +241,7 @@ body {
   display: grid;
   grid-template-columns: minmax(auto, 720px) auto; /* Kolom kanan diatur 'auto' agar lebar kolom mengikuti ukuran dinamis preview-panel */
   justify-content: center; /* Pusatkan seluruh konten grid secara horizontal */
-  gap: 120px; /* Jarak antar kolom diperlebar agar tidak terlalu berdempetan */
+  gap: clamp(20px, 8vw, 120px); /* Jarak antar kolom responsif agar tidak memotong di layar nanggung/zoom */
   padding: 2vh 4vw;
   align-items: stretch;
   background: #f6f1e9;
@@ -318,7 +318,7 @@ body {
 }
 
 /* ========== MOBILE & TABLET RESPONSIVE ========== */
-@media (max-width: 767px) {
+@media (max-width: 991px) {
   html,
   body,
   #app {

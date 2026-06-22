@@ -1071,7 +1071,7 @@ watch(
   margin-top: 18px;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 991px) {
   .camera-video-container {
     aspect-ratio: 4 / 3;
     height: 32vh; /* Atur tinggi tetap berbasis viewport height */
