@@ -671,6 +671,40 @@ watch(
 
 <template>
   <div class="camera-layout">
+    <!-- Floating background ornaments -->
+    <div
+      class="fa bg-deco bg-deco-star-tl"
+      style="top: 8%; left: 8%; color: #ff4cb0; font-size: 90px; text-shadow: 5px 5px 0 #000;"
+    >
+      ✦
+    </div>
+    <div
+      class="fb bg-deco bg-deco-box-tr"
+      style="top: 12%; right: 12%; width: 110px; height: 110px; background: #00e5ff;
+        border: 5px solid #000; box-shadow: 8px 8px 0 #000; transform: rotate(15deg);"
+    ></div>
+    <div
+      class="fc bg-deco bg-deco-box-bl"
+      style="bottom: 15%; left: 10%; width: 140px; height: 80px; background: #ff6b35;
+        border: 5px solid #000; box-shadow: -8px 8px 0 #000; transform: rotate(-10deg);"
+    ></div>
+    <div
+      class="fa bg-deco bg-deco-star-br"
+      style="bottom: 10%; right: 10%; color: #ffd700; font-size: 100px; text-shadow: 5px 5px 0 #000;"
+    >
+      ✦
+    </div>
+    <div
+      class="fb bg-deco bg-deco-sm-1"
+      style="top: 40%; left: 5%; width: 30px; height: 30px; background: #a855f7;
+        border: 3px solid #000; border-radius: 50%; box-shadow: 3px 3px 0 #000;"
+    ></div>
+    <div
+      class="fc bg-deco bg-deco-sm-2"
+      style="bottom: 40%; right: 6%; width: 40px; height: 40px; background: #fff;
+        border: 4px solid #000; box-shadow: 4px 4px 0 #000; transform: rotate(45deg);"
+    ></div>
+
     <!-- Back to Home Button Top Left -->
     <button
       class="btn-3d camera-close-btn"
@@ -682,7 +716,7 @@ watch(
       </svg>
     </button>
     <!-- Left: Video + Status -->
-    <div class="camera-left">
+    <div class="camera-left" style="position: relative; z-index: 2;">
       <!-- Title -->
       <div class="slide-up camera-title-container">
         <h2 class="neo-title camera-title-badge">
@@ -810,7 +844,7 @@ watch(
     </div>
 
     <!-- Right: Strip preview -->
-    <div class="preview-panel">
+    <div class="preview-panel" style="position: relative; z-index: 2;">
       <div class="preview-strip" :style="{ aspectRatio: previewAspect }">
         <div v-if="!hasFrame" style="width: 100%; padding: 16px; text-align: center; font-weight: 800;">
           PILIH FRAME DULU

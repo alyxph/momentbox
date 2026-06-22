@@ -153,6 +153,12 @@ body {
   animation: floatC 3.5s ease-in-out infinite 1.4s;
 }
 
+.bg-deco {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1;
+}
+
 .pulse-cam {
   animation: pulseCam 2s ease-in-out infinite;
 }
@@ -371,5 +377,43 @@ body {
   .neo-btn {
     box-shadow: 4px 4px 0 #000000;
     border-width: 3px;
+  }
+
+  .bg-deco-star-tl {
+    font-size: 50px !important;
+    top: 4% !important;
+    left: 4% !important;
+  }
+
+  .bg-deco-box-tr {
+    width: 60px !important;
+    height: 60px !important;
+    top: 6% !important;
+    right: 6% !important;
+    box-shadow: 5px 5px 0 #000 !important;
+  }
+
+  .bg-deco-box-bl {
+    width: 80px !important;
+    height: 50px !important;
+    bottom: 8% !important;
+    left: 5% !important;
+    box-shadow: -5px 5px 0 #000 !important;
+  }
+
+  .bg-deco-star-br {
+    font-size: 55px !important;
+    bottom: 5% !important;
+    right: 5% !important;
+  }
+
+  .bg-deco-sm-1 {
+    width: 20px !important;
+    height: 20px !important;
+  }
+
+  .bg-deco-sm-2 {
+    width: 25px !important;
+    height: 25px !important;
   }
 }

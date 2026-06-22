@@ -114,34 +114,36 @@ function drawStrip() {
       const promises = []
       photoArray.forEach((src, idx) => {
         if (!src) return
-        promises.push(new Promise((res) => {
-          const img = new Image()
-          img.onload = () => {
-            const y = startY + idx * (ph + gap)
-            const iw = img.width,
-              ih = img.height
-            const aspect = pw / ph
-            let sw, sh, sx, sy
-            if (iw / ih > aspect) {
-              sh = ih
-              sw = ih * aspect
-              sx = (iw - sw) / 2
-              sy = 0
-            } else {
-              sw = iw
-              sh = iw / aspect
-              sx = 0
-              sy = (ih - sh) / 2
+        promises.push(
+          new Promise((res) => {
+            const img = new Image()
+            img.onload = () => {
+              const y = startY + idx * (ph + gap)
+              const iw = img.width,
+                ih = img.height
+              const aspect = pw / ph
+              let sw, sh, sx, sy
+              if (iw / ih > aspect) {
+                sh = ih
+                sw = ih * aspect
+                sx = (iw - sw) / 2
+                sy = 0
+              } else {
+                sw = iw
+                sh = iw / aspect
+                sx = 0
+                sy = (ih - sh) / 2
+              }
+              ctx.drawImage(img, sx, sy, sw, sh, xOffset + 40, y, pw, ph)
+              ctx.strokeStyle = '#000'
+              ctx.lineWidth = 4
+              ctx.strokeRect(xOffset + 40, y, pw, ph)
+              res()
             }
-            ctx.drawImage(img, sx, sy, sw, sh, xOffset + 40, y, pw, ph)
-            ctx.strokeStyle = '#000'
-            ctx.lineWidth = 4
-            ctx.strokeRect(xOffset + 40, y, pw, ph)
-            res()
-          }
-          img.onerror = res
-          img.src = src
-        }))
+            img.onerror = res
+            img.src = src
+          }),
+        )
       })
       return Promise.all(promises)
     }
@@ -162,33 +164,39 @@ function drawStrip() {
         const src = photoArray[boxId - 1]
         if (!box || !src) return
 
-        promises.push(new Promise((res) => {
-          const img = new Image()
-          img.onload = () => {
-            const iw = img.width,
-              ih = img.height
-            const aspect = box.width / box.height
-            let sw, sh, sx, sy
-            if (iw / ih > aspect) {
-              sh = ih
-              sw = ih * aspect
-              sx = (iw - sw) / 2
-              sy = 0
-            } else {
-              sw = iw
-              sh = iw / aspect
-              sx = 0
-              sy = (ih - sh) / 2
+        promises.push(
+          new Promise((res) => {
+            const img = new Image()
+            img.onload = () => {
+              const iw = img.width,
+                ih = img.height
+              const aspect = box.width / box.height
+              let sw, sh, sx, sy
+              if (iw / ih > aspect) {
+                sh = ih
+                sw = ih * aspect
+                sx = (iw - sw) / 2
+                sy = 0
+              } else {
+                sw = iw
+                sh = iw / aspect
+                sx = 0
+                sy = (ih - sh) / 2
+              }
+              ctx.drawImage(img, sx, sy, sw, sh, xOffset + box.x, box.y, box.width, box.height)
+              if (
+                frameImg &&
+                order.indexOf('frame') > order.indexOf(layerId) &&
+                frameImg.complete
+              ) {
+                ctx.drawImage(frameImg, xOffset, 0, baseW, baseH)
+              }
+              res()
             }
-            ctx.drawImage(img, sx, sy, sw, sh, xOffset + box.x, box.y, box.width, box.height)
-            if (frameImg && order.indexOf('frame') > order.indexOf(layerId) && frameImg.complete) {
-              ctx.drawImage(frameImg, xOffset, 0, baseW, baseH)
-            }
-            res()
-          }
-          img.onerror = res
-          img.src = src
-        }))
+            img.onerror = res
+            img.src = src
+          }),
+        )
       })
       return Promise.all(promises)
     }
@@ -196,7 +204,7 @@ function drawStrip() {
     if (isDefault) {
       Promise.all([
         drawDefaultStrip(normalPhotos, 0),
-        drawDefaultStrip(shuffledPhotos, baseW + spacing)
+        drawDefaultStrip(shuffledPhotos, baseW + spacing),
       ]).then(() => resolve())
     } else {
       // --- DRAW CUSTOM LAYOUT ---
@@ -205,7 +213,7 @@ function drawStrip() {
       const drawAll = () => {
         Promise.all([
           drawCustomStrip(normalPhotos, 0, frameImg),
-          drawCustomStrip(shuffledPhotos, baseW + spacing, frameImg)
+          drawCustomStrip(shuffledPhotos, baseW + spacing, frameImg),
         ]).then(() => resolve())
       }
       if (layout.frameUrl) {
@@ -263,7 +271,9 @@ async function startBackgroundUpload() {
     uploadedPhotoUrlCache.value = await uploadToLitterbox(photoFile)
 
     uploadProgressText.value = 'MENGUNGGAH LIVE VIDEO (2/3)...'
-    const videoFile = new File([videoData.blob], `live.${videoData.fileExt}`, { type: videoData.blob.type })
+    const videoFile = new File([videoData.blob], `live.${videoData.fileExt}`, {
+      type: videoData.blob.type,
+    })
     uploadedGifUrlCache.value = await uploadToLitterbox(videoFile)
 
     uploadProgressText.value = 'MENYIAPKAN HALAMAN UNDUHAN (3/3)...'
@@ -647,11 +657,21 @@ function compileCompositeVideo() {
               if (!src) continue
               const img = await loadImage(src)
               const y = startY + idx * (ph + gap)
-              const iw = img.width, ih = img.height
+              const iw = img.width,
+                ih = img.height
               const aspect = pw / ph
               let sw, sh, sx, sy
-              if (iw / ih > aspect) { sh = ih; sw = ih * aspect; sx = (iw - sw) / 2; sy = 0 }
-              else { sw = iw; sh = iw / aspect; sx = 0; sy = (ih - sh) / 2 }
+              if (iw / ih > aspect) {
+                sh = ih
+                sw = ih * aspect
+                sx = (iw - sw) / 2
+                sy = 0
+              } else {
+                sw = iw
+                sh = iw / aspect
+                sx = 0
+                sy = (ih - sh) / 2
+              }
               ctx.drawImage(img, sx, sy, sw, sh, xOffset + 40, y, pw, ph)
               ctx.strokeStyle = '#000'
               ctx.lineWidth = 4
@@ -672,11 +692,21 @@ function compileCompositeVideo() {
               const src = frameArr && frameArr[i] ? frameArr[i] : props.photos[photoIdx]
               if (!src) continue
               const img = await loadImage(src)
-              const iw = img.width, ih = img.height
+              const iw = img.width,
+                ih = img.height
               const aspect = box.width / box.height
               let sw, sh, sx, sy
-              if (iw / ih > aspect) { sh = ih; sw = ih * aspect; sx = (iw - sw) / 2; sy = 0 }
-              else { sw = iw; sh = iw / aspect; sx = 0; sy = (ih - sh) / 2 }
+              if (iw / ih > aspect) {
+                sh = ih
+                sw = ih * aspect
+                sx = (iw - sw) / 2
+                sy = 0
+              } else {
+                sw = iw
+                sh = iw / aspect
+                sx = 0
+                sy = (ih - sh) / 2
+              }
               ctx.drawImage(img, sx, sy, sw, sh, xOffset + box.x, box.y, box.width, box.height)
               if (customFrameImg && orderConfig.indexOf('frame') > orderConfig.indexOf(layerId)) {
                 ctx.drawImage(customFrameImg, xOffset, 0, baseW, baseH)
@@ -722,8 +752,9 @@ function compileCompositeVideo() {
 
       // Check if MediaRecorder + captureStream are supported
       const supportsMediaRecorder = typeof MediaRecorder !== 'undefined'
-      const supportsCapture = typeof HTMLCanvasElement.prototype.captureStream === 'function'
-        || typeof HTMLCanvasElement.prototype.mozCaptureStream === 'function'
+      const supportsCapture =
+        typeof HTMLCanvasElement.prototype.captureStream === 'function' ||
+        typeof HTMLCanvasElement.prototype.mozCaptureStream === 'function'
 
       // Try video recording path
       if (supportsMediaRecorder && supportsCapture) {
@@ -760,8 +791,9 @@ function compileCompositeVideo() {
           const fps = 10
           const frameDurationMs = 1000 / fps
 
-          const captureStreamFn = videoCanvas.captureStream?.bind(videoCanvas)
-            || videoCanvas.mozCaptureStream?.bind(videoCanvas)
+          const captureStreamFn =
+            videoCanvas.captureStream?.bind(videoCanvas) ||
+            videoCanvas.mozCaptureStream?.bind(videoCanvas)
           const stream = captureStreamFn(fps)
           const recorder = new MediaRecorder(stream, {
             mimeType: chosenMime,
@@ -815,39 +847,45 @@ function compileCompositeVideo() {
       videoProgress.value = 45
       const gifshotLib = window.gifshot
       if (!gifshotLib) {
-        throw new Error('Perangkat ini tidak mendukung pembuatan video dan library GIF tidak tersedia.')
+        throw new Error(
+          'Perangkat ini tidak mendukung pembuatan video dan library GIF tidak tersedia.',
+        )
       }
 
       // Sample frames evenly – keep max 20 for GIF to avoid OOM
       const MAX_GIF_FRAMES = 20
       const step = Math.max(1, Math.floor(uniqueFrameDataURLs.length / MAX_GIF_FRAMES))
-      const gifFrames = uniqueFrameDataURLs.filter((_, i) => i % step === 0).slice(0, MAX_GIF_FRAMES)
+      const gifFrames = uniqueFrameDataURLs
+        .filter((_, i) => i % step === 0)
+        .slice(0, MAX_GIF_FRAMES)
 
       videoProgress.value = 50
 
       await new Promise((res, rej) => {
-        gifshotLib.createGIF({
-          images: gifFrames,
-          gifWidth: outW,
-          gifHeight: outH,
-          interval: 0.12,
-          numFrames: gifFrames.length,
-          frameDuration: 1,
-          sampleInterval: 15,
-        }, (obj) => {
-          videoProgress.value = 95
-          if (!obj.error && obj.image) {
-            // Convert base64 GIF to blob
-            const blob = dataURLtoBlob(obj.image)
-            compileVideoPromise = null
-            resolve({ blob, fileExt: 'gif' })
-            res()
-          } else {
-            rej(new Error(obj.error || 'GIF creation failed'))
-          }
-        })
+        gifshotLib.createGIF(
+          {
+            images: gifFrames,
+            gifWidth: outW,
+            gifHeight: outH,
+            interval: 0.12,
+            numFrames: gifFrames.length,
+            frameDuration: 1,
+            sampleInterval: 15,
+          },
+          (obj) => {
+            videoProgress.value = 95
+            if (!obj.error && obj.image) {
+              // Convert base64 GIF to blob
+              const blob = dataURLtoBlob(obj.image)
+              compileVideoPromise = null
+              resolve({ blob, fileExt: 'gif' })
+              res()
+            } else {
+              rej(new Error(obj.error || 'GIF creation failed'))
+            }
+          },
+        )
       })
-
     } catch (err) {
       compileVideoPromise = null
       reject(err)
@@ -893,7 +931,6 @@ function dataURLtoBlob(dataurl) {
   return new Blob([u8arr], { type: mime })
 }
 
-
 onMounted(() => {
   const savedButtons = localStorage.getItem('photobooth_preview_buttons')
   if (savedButtons) {
@@ -921,15 +958,13 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div
-    class="checkerboard preview-layout"
-  >
+  <div class="checkerboard preview-layout">
     <!-- LEFT SIDE: PREVIEW PANEL -->
     <div class="preview-left">
       <!-- Shared Wrapper for both Photo and GIF strip to guarantee identical sizing -->
       <div
         :style="{
-          aspectRatio: (previewBase.baseW * 2) + '/' + previewBase.baseH
+          aspectRatio: previewBase.baseW * 2 + '/' + previewBase.baseH,
         }"
         class="preview-strip-wrapper"
       >
@@ -1182,9 +1217,7 @@ onUnmounted(() => {
     <!-- RIGHT SIDE: CONTROL PANEL -->
     <div class="preview-controls">
       <header style="text-align: center; margin-bottom: 6px">
-        <h1 class="neo-title preview-main-title">
-          FOTO STRIP KAMU
-        </h1>
+        <h1 class="neo-title preview-main-title">FOTO STRIP KAMU</h1>
         <div class="neo-chip" style="background: #ffd400; font-size: 13px; font-weight: 900">
           FRAME: {{ selectedFrame.name }}
         </div>
@@ -1226,7 +1259,9 @@ onUnmounted(() => {
           :disabled="isVideoGenerating"
           @click="downloadCompositeVideo"
         >
-          {{ isVideoGenerating ? `MEREKAM VIDEO... ${videoProgress}%` : 'DOWNLOAD VIDEO (MP4/STORY)' }}
+          {{
+            isVideoGenerating ? `MEREKAM VIDEO... ${videoProgress}%` : 'DOWNLOAD VIDEO (MP4/STORY)'
+          }}
         </button>
 
         <button
@@ -1270,10 +1305,7 @@ onUnmounted(() => {
     </div>
 
     <!-- QR Modal -->
-    <div
-      v-if="showQrModal"
-      class="qr-modal-overlay"
-    >
+    <div v-if="showQrModal" class="qr-modal-overlay">
       <div class="neo-block bounce-in qr-modal-card">
         <button
           @click="showQrModal = false"
@@ -1306,7 +1338,9 @@ onUnmounted(() => {
                 animation: spin 1s linear infinite;
               "
             ></div>
-            <p style="font-weight: 800; font-size: 14px; color: #000">{{ uploadProgressText || 'MENGUNGGAH...' }}</p>
+            <p style="font-weight: 800; font-size: 14px; color: #000">
+              {{ uploadProgressText || 'MENGUNGGAH...' }}
+            </p>
           </div>
           <img v-else :src="qrUrl" style="width: 90%; height: 90%; image-rendering: pixelated" />
         </div>
