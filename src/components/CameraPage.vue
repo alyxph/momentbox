@@ -1081,8 +1081,8 @@ watch(
   }
 
   .camera-close-btn {
-    top: 12px;
-    left: 12px;
+    top: 8px;
+    left: 8px;
     width: 42px;
     height: 42px;
     border-width: 3px;

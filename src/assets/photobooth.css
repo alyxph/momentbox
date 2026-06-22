@@ -335,7 +335,7 @@ body {
   .camera-layout {
     grid-template-columns: 1fr;
     gap: 16px;
-    padding: 16px;
+    padding: 8px;
     height: auto;
     min-height: 100vh;
     min-height: 100dvh;
@@ -347,7 +347,7 @@ body {
   }
 
   .preview-panel {
-    max-width: 180px; /* Perkecil preview frame di mobile agar tidak memakan layar penuh */
+    max-width: 260px; /* Diperbesar agar mirip dengan mockup yang diinginkan user */
     margin: 0 auto;
     width: 100%;
     flex-direction: column;

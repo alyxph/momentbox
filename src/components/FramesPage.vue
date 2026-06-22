@@ -143,6 +143,8 @@ const emit = defineEmits(['select', 'go-home']);
   height: 100%;
   overflow-y: auto;
   background-color: #f6f1e9;
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .frames-header {
