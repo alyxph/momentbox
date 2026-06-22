@@ -111,27 +111,6 @@ const emit = defineEmits(['select', 'go-home']);
             </div>
           </div>
         </div>
-
-        <!-- Frame info -->
-        <div style="padding: 12px; border-top: 4px solid #000;">
-          <h3 style="font-family: 'Bangers', cursive; font-size: 20px; color: #000; margin: 0;">
-            {{ frame.name }}
-          </h3>
-          <p style="font-size: 11px; color: #888; font-weight: 800; text-transform: uppercase; margin-top: 2px;">
-            {{ frame.pattern }}
-          </p>
-        </div>
-
-        <!-- Select button -->
-        <div style="padding: 0 12px 12px;">
-          <button
-            class="btn-3d"
-            :style="`background:${frame.accent}; color:${frame.btnText}; width:100%; padding:10px; border:3px solid #000;
-              font-family:'Bangers',cursive; font-size:14px; letter-spacing:1.5px; cursor:pointer; box-shadow:4px 4px 0 #000;`"
-          >
-            PILIH TEMA
-          </button>
-        </div>
       </div>
     </div>
   </div>

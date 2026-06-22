@@ -969,7 +969,7 @@ watch(
 
 .retake-hotspot {
   position: absolute;
-  border: 2px dashed rgba(0, 0, 0, 0.6);
+  border: none;
   background: rgba(255, 255, 255, 0);
   cursor: pointer;
   padding: 0;
