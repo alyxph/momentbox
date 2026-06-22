@@ -1489,7 +1489,7 @@ onUnmounted(() => {
 }
 
 /* ===== MOBILE ===== */
-@media (max-width: 1024px) {
+@media (max-width: 767px) {
   .preview-layout {
     flex-direction: column;
     height: 100vh;

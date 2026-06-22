@@ -49,7 +49,7 @@ const emit = defineEmits(['select', 'go-home']);
 
       <div>
         <h2 class="frames-header-title">
-          🎨 PILIH FRAME TEMA
+          PILIH FRAME TEMA
         </h2>
         <p class="frames-header-sub">
           TENTUKAN TAMPILAN FOTO STRIP KAMU
@@ -201,7 +201,14 @@ const emit = defineEmits(['select', 'go-home']);
   margin: 0 auto;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 767px) {
+  .frames-page {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
   .frames-header {
     padding: 10px 14px;
     gap: 10px;

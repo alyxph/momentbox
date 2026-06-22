@@ -673,13 +673,10 @@ watch(
   <div class="camera-layout">
     <!-- Back to Home Button Top Left -->
     <button
-      class="btn-3d"
-      style="position: absolute; top: 24px; left: 24px; width: 64px; height: 64px; background: #ff4cb0;
-        border: 4px solid #000; box-shadow: 6px 6px 0 #000; border-radius: 0;
-        display: flex; align-items: center; justify-content: center; z-index: 50; cursor: pointer;"
+      class="btn-3d camera-close-btn"
       @click="emit('change-frame')"
     >
-      <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+      <svg class="camera-close-icon" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round">
         <line x1="18" y1="6" x2="6" y2="18"></line>
         <line x1="6" y1="6" x2="18" y2="18"></line>
       </svg>
@@ -687,48 +684,38 @@ watch(
     <!-- Left: Video + Status -->
     <div class="camera-left">
       <!-- Title -->
-      <div class="slide-up" style="text-align: center; margin-bottom: 18px;">
-        <h2
-          class="neo-title"
-          style="font-size: clamp(24px, 4vw, 40px); background: #ff4cb0; border: 4px solid #000;
-            box-shadow: 6px 6px 0 #000; padding: 6px 16px; display: inline-block;"
-        >
+      <div class="slide-up camera-title-container">
+        <h2 class="neo-title camera-title-badge">
           FOTO {{ Math.min(photosList.length + 1, 4) }} / 4
         </h2>
       </div>
 
       <!-- Main Area: Video + Overlay Button -->
-        <div style="width: 100%; display: flex; flex-direction: column; align-items: center; padding-top: 10px;">
-          <div style="width: 100%; max-width: 1000px;">
+      <div style="width: 100%; display: flex; flex-direction: column; align-items: center; padding-top: 10px;">
+        <div class="camera-content-wrapper">
           <!-- Video -->
           <div
-            class="neo-block"
-            style="position: relative; width: 100%; max-height: 72vh; overflow: hidden; border-radius: 2px; background: #000;"
+            class="neo-block camera-video-container"
           >
             <video
               ref="videoEl"
               autoplay
               playsinline
               muted
-              class="video-mirror"
-              style="width: 100%; height: auto; min-height: 300px; max-height: 72vh; object-fit: cover; display: block;"
+              class="video-mirror camera-video-element"
             ></video>
 
             <!-- Start button overlay -->
             <div
               v-if="!isCapturing && photosList.length === 0"
-              style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end;
-                z-index: 3; pointer-events: none; padding-right: 32px;"
+              class="camera-shutter-overlay"
             >
-              <div style="display: flex; flex-direction: column; align-items: center; gap: 12px; pointer-events: auto;">
+              <div class="camera-shutter-wrapper">
                 <button
-                  class="pulse-cam"
-                  style="width: 100px; height: 100px; background: #00e5ff; border-radius: 50%;
-                    border: 5px solid #000; font-size: 42px; display: inline-flex; align-items: center;
-                    justify-content: center; box-shadow: 6px 6px 0 #000; cursor: pointer; outline: none;"
+                  class="pulse-cam camera-shutter-btn"
                   @click="startCapture"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <svg class="camera-shutter-icon" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M20 7h-3l-2-3H9L7 7H4c-1.1 0-2 .9-2 2v9c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2z"/>
                     <circle cx="12" cy="13" r="3.5"/>
                   </svg>
@@ -788,7 +775,7 @@ watch(
           </div>
 
           <!-- Progress bar -->
-          <div style="width: 100%; margin-top: 18px;">
+          <div class="camera-progress-container">
             <div
               style="height: 12px; background: #ffffff; border: 3px solid #000; overflow: hidden;"
             >
@@ -824,14 +811,7 @@ watch(
 
     <!-- Right: Strip preview -->
     <div class="preview-panel">
-      <h3
-        class="neo-title"
-        style="font-size: 16px; letter-spacing: 2px; text-align: center; background: #ffd400;
-          border: 3px solid #000; padding: 6px 10px; box-shadow: 4px 4px 0 #000;"
-      >
-        PREVIEW FRAME
-      </h3>
-      <div class="preview-strip">
+      <div class="preview-strip" :style="{ aspectRatio: previewAspect }">
         <div v-if="!hasFrame" style="width: 100%; padding: 16px; text-align: center; font-weight: 800;">
           PILIH FRAME DULU
         </div>
@@ -856,9 +836,6 @@ watch(
           </template>
         </div>
       </div>
-      <p style="color: #111; font-size: 10px; letter-spacing: 1px; text-align: center; font-weight: 800;">
-        FRAME: {{ frameName }}
-      </p>
       <!-- instruction moved to popup; inline hint removed -->
 
       <!-- 'Next' is available in the popup; panel button removed to avoid duplication -->
@@ -989,5 +966,182 @@ watch(
   justify-content: center;
 }
 
+.camera-video-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3; /* Gunakan rasio landscape standar agar tidak terlalu memanjang ke bawah */
+  overflow: hidden;
+  border-radius: 2px;
+  background: #000;
+}
 
+.camera-video-element {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.camera-close-btn {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  width: 64px;
+  height: 64px;
+  background: #ff4cb0;
+  border: 4px solid #000;
+  box-shadow: 6px 6px 0 #000;
+  border-radius: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  cursor: pointer;
+}
+
+.camera-close-icon {
+  width: 40px;
+  height: 40px;
+  stroke: #000;
+  stroke-width: 4;
+}
+
+.camera-title-container {
+  text-align: center;
+  margin-bottom: 18px;
+}
+
+.camera-title-badge {
+  font-size: clamp(24px, 4vw, 40px);
+  background: #ff4cb0;
+  border: 4px solid #000;
+  box-shadow: 6px 6px 0 #000;
+  padding: 6px 16px;
+  display: inline-block;
+}
+
+.camera-shutter-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  z-index: 3;
+  pointer-events: none;
+  padding-right: 32px;
+}
+
+.camera-shutter-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  pointer-events: auto;
+}
+
+.camera-shutter-btn {
+  width: 100px;
+  height: 100px;
+  background: #00e5ff;
+  border-radius: 50%;
+  border: 5px solid #000;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 6px 6px 0 #000;
+  cursor: pointer;
+  outline: none;
+}
+
+.camera-shutter-icon {
+  width: 48px;
+  height: 48px;
+  stroke: #000;
+  stroke-width: 2.5;
+}
+
+.camera-content-wrapper {
+  width: 100%;
+  max-width: min(720px, 90.6vh); /* Diperbesar batasnya agar memanfaatkan ruang layar tinggi dengan maksimal tanpa offside di layar pendek */
+  margin: 0 auto;
+}
+
+.camera-progress-container {
+  width: 100%;
+  margin-top: 18px;
+}
+
+@media (max-width: 767px) {
+  .camera-video-container {
+    aspect-ratio: 4 / 3;
+    height: 32vh; /* Atur tinggi tetap berbasis viewport height */
+    width: auto;  /* Lebar otomatis mengikuti aspect ratio 4:3 agar tidak gepeng */
+    max-width: 100%;
+    margin: 0 auto; /* Pusatkan secara horizontal */
+  }
+
+  .camera-close-btn {
+    top: 12px;
+    left: 12px;
+    width: 42px;
+    height: 42px;
+    border-width: 3px;
+    box-shadow: 3px 3px 0 #000;
+  }
+
+  .camera-close-icon {
+    width: 24px;
+    height: 24px;
+    stroke-width: 3.5;
+  }
+
+  .camera-title-container {
+    margin-bottom: 10px;
+  }
+
+  .camera-title-badge {
+    font-size: 20px;
+    border-width: 3px;
+    box-shadow: 3px 3px 0 #000;
+    padding: 4px 12px;
+  }
+
+  .camera-shutter-overlay {
+    justify-content: center;
+    padding-right: 0;
+    bottom: 20px;
+    top: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    width: auto;
+    height: auto;
+  }
+
+  .camera-shutter-btn {
+    width: 72px;
+    height: 72px;
+    border-width: 4px;
+    box-shadow: 4px 4px 0 #000;
+  }
+
+  .camera-shutter-icon {
+    width: 34px;
+    height: 34px;
+    stroke-width: 2;
+  }
+
+  .camera-content-wrapper {
+    width: fit-content;
+    max-width: 100%;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .camera-progress-container {
+    width: 100%;
+    margin-top: 12px;
+  }
+}
 </style>
