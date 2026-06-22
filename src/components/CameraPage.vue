@@ -1074,10 +1074,10 @@ watch(
 @media (max-width: 991px) {
   .camera-video-container {
     aspect-ratio: 4 / 3;
-    height: 32vh; /* Atur tinggi tetap berbasis viewport height */
-    width: auto;  /* Lebar otomatis mengikuti aspect ratio 4:3 agar tidak gepeng */
-    max-width: 100%;
-    margin: 0 auto; /* Pusatkan secara horizontal */
+    height: auto;
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
   }
 
   .camera-close-btn {
@@ -1131,8 +1131,8 @@ watch(
   }
 
   .camera-content-wrapper {
-    width: fit-content;
-    max-width: 100%;
+    width: 100%;
+    max-width: 480px;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
