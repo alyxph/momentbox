@@ -667,6 +667,25 @@ watch(
   },
   { deep: true, immediate: true }
 );
+
+const cameraAspectRatio = computed(() => {
+  const layout = props.selectedFrame;
+  if (!layout) return '3 / 2';
+  const isDefault = !!frameConfigs[layout.id];
+  if (isDefault) {
+    const baseW = 600;
+    const baseH = 1800;
+    const pw = baseW - 80;
+    const ph = (baseH - 420) / 4;
+    return `${pw} / ${ph}`;
+  }
+  if (layout.boxes && layout.boxes.length > 0) {
+    const box = layout.boxes[0];
+    return `${box.width} / ${box.height}`;
+  }
+  return '3 / 2';
+});
+
 </script>
 
 <template>
@@ -730,6 +749,7 @@ watch(
           <!-- Video -->
           <div
             class="neo-block camera-video-container"
+            :style="{ aspectRatio: cameraAspectRatio }"
           >
             <video
               ref="videoEl"
