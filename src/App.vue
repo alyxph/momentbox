@@ -130,6 +130,7 @@ function deleteLayout(id) {
       :frames="frames"
       :photos="photos"
       :custom-layouts="customLayouts"
+      :selected-frame="selectedFrame"
       @select="selectFrame"
       @go-home="goHome"
     />
