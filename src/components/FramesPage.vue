@@ -1,5 +1,7 @@
 <script setup>
-import { computed, ref, onMounted, nextTick } from 'vue';
+import { computed, ref, onMounted } from 'vue';
+import { Swiper, SwiperSlide } from 'swiper/vue';
+import 'swiper/css';
 import { frameConfigs } from '../data/frames';
 
 const props = defineProps({
@@ -40,11 +42,25 @@ const allFrames = computed(() => {
 });
 
 const selectedLocalFrame = ref(null);
-const carouselRef = ref(null);
+const swiperRef = ref(null);
 
-const tripledFrames = computed(() => {
-  if (allFrames.value.length === 0) return [];
-  return [...allFrames.value, ...allFrames.value, ...allFrames.value];
+const swiperBreakpoints = {
+  320: {
+    spaceBetween: 18
+  },
+  768: {
+    spaceBetween: 28
+  }
+};
+
+const carouselSlides = computed(() => {
+  const list = allFrames.value;
+  if (list.length === 0) return [];
+  // If list length is small (e.g. 4 frames), we triple it to prevent Swiper infinite loop from stopping at ends.
+  if (list.length < 8) {
+    return [...list, ...list, ...list];
+  }
+  return list;
 });
 
 onMounted(() => {
@@ -53,32 +69,55 @@ onMounted(() => {
   } else {
     selectedLocalFrame.value = allFrames.value[0];
   }
-  
-  nextTick(() => {
-    setTimeout(() => {
-      if (carouselRef.value && allFrames.value.length > 0) {
-        const idx = allFrames.value.findIndex(f => f.id === selectedLocalFrame.value?.id);
-        const N = allFrames.value.length;
-        const targetDOMIndex = N + (idx >= 0 ? idx : 0);
-        const targetCardEl = carouselRef.value.children[targetDOMIndex];
-        if (targetCardEl) {
-          targetCardEl.scrollIntoView({ block: 'nearest', inline: 'center' });
-        }
-      }
-    }, 100);
-  });
 });
 
-function selectFrame(frame, index) {
+const onSwiper = (swiper) => {
+  swiperRef.value = swiper;
+  if (selectedLocalFrame.value) {
+    const originalIndex = allFrames.value.findIndex(f => f.id === selectedLocalFrame.value.id);
+    if (originalIndex >= 0) {
+      const N = allFrames.value.length;
+      const startIndex = N < 8 ? N + originalIndex : originalIndex;
+      swiper.slideToLoop(startIndex, 0);
+    }
+  }
+};
+
+const onSlideChange = () => {
+  if (swiperRef.value) {
+    const realIndex = swiperRef.value.realIndex;
+    const N = allFrames.value.length;
+    const actualIndex = N > 0 ? realIndex % N : 0;
+    if (allFrames.value[actualIndex]) {
+      selectedLocalFrame.value = allFrames.value[actualIndex];
+    }
+  }
+};
+
+function selectFrame(frame) {
   selectedLocalFrame.value = frame;
-  nextTick(() => {
-    if (carouselRef.value) {
-      const clickedEl = carouselRef.value.children[index];
-      if (clickedEl) {
-        clickedEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  if (swiperRef.value) {
+    const N = allFrames.value.length;
+    const originalIndex = allFrames.value.findIndex(f => f.id === frame.id);
+    if (originalIndex >= 0) {
+      if (N < 8) {
+        const currentIndex = swiperRef.value.realIndex;
+        const copies = [originalIndex, originalIndex + N, originalIndex + 2 * N];
+        let bestIndex = copies[0];
+        let minDistance = Infinity;
+        for (const copy of copies) {
+          const distance = Math.abs(copy - currentIndex);
+          if (distance < minDistance) {
+            minDistance = distance;
+            bestIndex = copy;
+          }
+        }
+        swiperRef.value.slideToLoop(bestIndex, 300);
+      } else {
+        swiperRef.value.slideToLoop(originalIndex, 300);
       }
     }
-  });
+  }
 }
 
 function handleNext() {
@@ -88,70 +127,11 @@ function handleNext() {
 }
 
 function scrollLeft() {
-  if (carouselRef.value && allFrames.value.length > 0) {
-    const currentIndex = allFrames.value.findIndex(f => f.id === selectedLocalFrame.value?.id);
-    let nextIndex = currentIndex - 1;
-    if (nextIndex < 0) {
-      nextIndex = allFrames.value.length - 1;
-    }
-    const nextFrame = allFrames.value[nextIndex];
-    selectedLocalFrame.value = nextFrame;
-    
-    nextTick(() => {
-      const N = allFrames.value.length;
-      const targetDOMIndex = N + nextIndex;
-      const targetCardEl = carouselRef.value?.children[targetDOMIndex];
-      if (targetCardEl) {
-        targetCardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-      }
-    });
-  }
+  swiperRef.value?.slidePrev();
 }
 
 function scrollRight() {
-  if (carouselRef.value && allFrames.value.length > 0) {
-    const currentIndex = allFrames.value.findIndex(f => f.id === selectedLocalFrame.value?.id);
-    let nextIndex = currentIndex + 1;
-    if (nextIndex >= allFrames.value.length) {
-      nextIndex = 0;
-    }
-    const nextFrame = allFrames.value[nextIndex];
-    selectedLocalFrame.value = nextFrame;
-    
-    nextTick(() => {
-      const N = allFrames.value.length;
-      const targetDOMIndex = N + nextIndex;
-      const targetCardEl = carouselRef.value?.children[targetDOMIndex];
-      if (targetCardEl) {
-        targetCardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-      }
-    });
-  }
-}
-
-function handleScroll() {
-  const el = carouselRef.value;
-  if (!el) return;
-  
-  const N = allFrames.value.length;
-  if (N === 0) return;
-  
-  const children = el.children;
-  if (children.length < N * 3) return;
-  
-  const middleStart = children[N].offsetLeft - (el.clientWidth - children[N].clientWidth) / 2;
-  const middleEnd = children[N * 2].offsetLeft - (el.clientWidth - children[N * 2].clientWidth) / 2;
-  const setScrollWidth = middleEnd - middleStart;
-  
-  const maxScroll = el.scrollWidth - el.clientWidth;
-  
-  // Only trigger jump reposition when getting very close to the extreme left/right edges.
-  // This keeps the user within the middle/safe zone during 99% of scrolling, avoiding constant jumping conflicts.
-  if (el.scrollLeft < 100) {
-    el.scrollLeft += setScrollWidth;
-  } else if (el.scrollLeft > maxScroll - 100) {
-    el.scrollLeft -= setScrollWidth;
-  }
+  swiperRef.value?.slideNext();
 }
 
 function getBoxStyle(box, frame) {
@@ -211,64 +191,76 @@ const defaultBoxes = [
       </button>
 
       <!-- Carousel -->
-      <div class="frames-carousel" ref="carouselRef" @scroll="handleScroll">
-        <div
-          v-for="(frame, index) in tripledFrames"
+      <swiper
+        class="frames-carousel"
+        :slides-per-view="'auto'"
+        :centered-slides="true"
+        :breakpoints="swiperBreakpoints"
+        :loop="true"
+        @swiper="onSwiper"
+        @slideChange="onSlideChange"
+      >
+        <swiper-slide
+          v-for="(frame, index) in carouselSlides"
           :key="frame.id + '-' + index"
-          class="frame-card-new"
-          :class="{ 'selected': selectedLocalFrame && selectedLocalFrame.id === frame.id }"
-          @click="selectFrame(frame, index)"
+          class="frame-slide-item"
         >
-          <!-- Frame Strip Container wrapper -->
-          <div class="frame-strip-wrapper">
-            
-            <!-- Custom/Preset Frame (Image Overlay + Purple Placeholders) -->
-            <div 
-              v-if="frame.frameUrl" 
-              class="frame-strip-container" 
-              :style="{ aspectRatio: (frame.frame?.width || 600) + '/' + (frame.frame?.height || 1800) }"
-            >
-              <!-- Absolute Purple Placeholders Behind PNG -->
-              <div
-                v-for="box in frame.boxes"
-                :key="box.id"
-                :style="getBoxStyle(box, frame)"
-              ></div>
-              <!-- Frame PNG overlay -->
-              <img :src="frame.frameUrl" class="frame-overlay-img" alt="Frame Overlay" />
-            </div>
-
-            <!-- Default Frame Strip (Canvas CSS style + Purple Placeholders) -->
-            <div 
-              v-else 
-              class="frame-strip-container default-frame-strip"
-              :style="{ backgroundColor: frameConfigs[frame.id]?.bg || '#fff', borderColor: frameConfigs[frame.id]?.border || '#000', aspectRatio: '600/1800' }"
-            >
-              <!-- Header -->
+          <div
+            class="frame-card-new"
+            :class="{ 'selected': selectedLocalFrame && selectedLocalFrame.id === frame.id }"
+            @click="selectFrame(frame)"
+          >
+            <!-- Frame Strip Container wrapper -->
+            <div class="frame-strip-wrapper">
+              
+              <!-- Custom/Preset Frame (Image Overlay + Purple Placeholders) -->
               <div 
-                class="default-frame-header"
-                :style="{ background: frameConfigs[frame.id]?.headerBg || '#000', color: frameConfigs[frame.id]?.headerText || '#fff' }"
+                v-if="frame.frameUrl" 
+                class="frame-strip-container" 
+                :style="{ aspectRatio: (frame.frame?.width || 600) + '/' + (frame.frame?.height || 1800) }"
               >
-                ✦ {{ frame.name }} ✦
+                <!-- Absolute Purple Placeholders Behind PNG -->
+                <div
+                  v-for="box in frame.boxes"
+                  :key="box.id"
+                  :style="getBoxStyle(box, frame)"
+                ></div>
+                <!-- Frame PNG overlay -->
+                <img :src="frame.frameUrl" class="frame-overlay-img" alt="Frame Overlay" />
               </div>
 
-              <!-- Purple Photo Placeholders positioned identically to preview -->
-              <div
-                v-for="box in defaultBoxes"
-                :key="box.id"
-                :style="getBoxStyle(box, { frame: { width: 600, height: 1800 } })"
-              ></div>
-
-              <!-- Footer -->
+              <!-- Default Frame Strip (Canvas CSS style + Purple Placeholders) -->
               <div 
-                class="default-frame-footer"
-                :style="{ background: frameConfigs[frame.id]?.footerBg || '#eee' }"
-              ></div>
-            </div>
+                v-else 
+                class="frame-strip-container default-frame-strip"
+                :style="{ backgroundColor: frameConfigs[frame.id]?.bg || '#fff', borderColor: frameConfigs[frame.id]?.border || '#000', aspectRatio: '600/1800' }"
+              >
+                <!-- Header -->
+                <div 
+                  class="default-frame-header"
+                  :style="{ background: frameConfigs[frame.id]?.headerBg || '#000', color: frameConfigs[frame.id]?.headerText || '#fff' }"
+                >
+                  ✦ {{ frame.name }} ✦
+                </div>
 
+                <!-- Purple Photo Placeholders positioned identically to preview -->
+                <div
+                  v-for="box in defaultBoxes"
+                  :key="box.id"
+                  :style="getBoxStyle(box, { frame: { width: 600, height: 1800 } })"
+                ></div>
+
+                <!-- Footer -->
+                <div 
+                  class="default-frame-footer"
+                  :style="{ background: frameConfigs[frame.id]?.footerBg || '#eee' }"
+                ></div>
+              </div>
+
+            </div>
           </div>
-        </div>
-      </div>
+        </swiper-slide>
+      </swiper>
 
       <!-- Right Arrow -->
       <button class="carousel-nav-btn next-btn" @click="scrollRight" aria-label="Berikutnya">
@@ -285,7 +277,7 @@ const defaultBoxes = [
         @click="handleNext" 
         :disabled="!selectedLocalFrame"
       >
-        Next! <span class="btn-arrow">→</span>
+        Next!
       </button>
     </div>
   </div>
@@ -403,17 +395,14 @@ const defaultBoxes = [
 }
 
 .frames-carousel {
-  display: flex;
-  overflow-x: auto;
-  gap: 28px;
-  padding: 20px 60px;
-  scroll-behavior: smooth;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none; /* Hide scrollbar for Firefox */
+  width: 100%;
+  overflow: hidden;
+  padding: 20px 0;
 }
-.frames-carousel::-webkit-scrollbar {
-  display: none; /* Hide scrollbar for Chrome/Safari/Opera */
+.frame-slide-item {
+  width: auto !important;
+  display: flex;
+  justify-content: center;
 }
 
 /* Frame Card */
@@ -596,13 +585,6 @@ const defaultBoxes = [
   box-shadow: 2px 2px 0 #000000;
   border-color: #000000;
 }
-.btn-arrow {
-  font-size: 20px;
-  transition: transform 0.2s ease;
-}
-.btn-next:hover .btn-arrow {
-  transform: translateX(4px);
-}
 
 /* Responsiveness overrides */
 @media (max-width: 768px) {
@@ -630,8 +612,7 @@ const defaultBoxes = [
     display: none; /* Hide arrows on mobile touch devices */
   }
   .frames-carousel {
-    padding: 10px 20px;
-    gap: 18px;
+    padding: 10px 0;
   }
   .frame-card-new {
     flex: 0 0 210px;
