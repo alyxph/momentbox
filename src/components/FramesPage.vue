@@ -56,11 +56,13 @@ const swiperBreakpoints = {
 const carouselSlides = computed(() => {
   const list = allFrames.value;
   if (list.length === 0) return [];
-  // If list length is small (e.g. 4 frames), we triple it to prevent Swiper infinite loop from stopping at ends.
-  if (list.length < 8) {
-    return [...list, ...list, ...list];
+  
+  // Duplicate list until there are enough items for smooth infinite loop
+  let duplicatedList = [...list];
+  while (duplicatedList.length < 12) {
+    duplicatedList = [...duplicatedList, ...list];
   }
-  return list;
+  return duplicatedList;
 });
 
 onMounted(() => {

@@ -237,46 +237,66 @@ function downloadImage() {
   link.click()
 }
 
-async function uploadToLitterbox(file) {
-  const formData = new FormData()
-  formData.append('reqtype', 'fileupload')
-  formData.append('time', '12h')
-  formData.append('fileToUpload', file)
+async function uploadToLitterbox(file, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const formData = new FormData()
+      formData.append('reqtype', 'fileupload')
+      formData.append('time', '12h')
+      formData.append('fileToUpload', file)
 
-  const res = await fetch('/api/upload', {
-    method: 'POST',
-    body: formData,
-  })
-  const text = await res.text()
-  if (text.startsWith('http')) {
-    return text
-  } else {
-    throw new Error(text || 'Upload failed')
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      })
+      const text = await res.text()
+      if (text.startsWith('http')) {
+        return text
+      } else {
+        throw new Error(text || 'Upload failed')
+      }
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      await new Promise(r => setTimeout(r, 1500)); // wait 1.5s before retry
+    }
   }
 }
 
 async function startBackgroundUpload() {
   if (isBackgroundUploading.value || uploadedHtmlUrlCache.value) return
   isBackgroundUploading.value = true
-  uploadProgressText.value = 'MENGOMPILASI LIVE VIDEO...'
+  uploadProgressText.value = 'MEMPROSES FOTO...'
 
   try {
-    const videoData = await compileCompositeVideo()
-
-    uploadProgressText.value = 'MENGUNGGAH PHOTO STRIP (1/3)...'
     const canvas = canvasRef.value
     if (!canvas) throw new Error('Canvas foto tidak ditemukan')
-    const photoBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9))
-    const photoFile = new File([photoBlob], 'photo.jpg', { type: 'image/jpeg' })
-    uploadedPhotoUrlCache.value = await uploadToLitterbox(photoFile)
 
-    uploadProgressText.value = 'MENGUNGGAH LIVE VIDEO (2/3)...'
+    // === PIPELINE STRATEGY (Tablet-safe & Fast) ===
+    // Step 1: Generate photo blob FIRST (instant, <100ms)
+    const photoBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.80))
+    const photoFile = new File([photoBlob], 'photo.jpg', { type: 'image/jpeg' })
+
+    // Step 2: Start photo upload AND video compilation AT THE SAME TIME
+    //   - Photo upload = network I/O (low CPU/RAM)
+    //   - Video compile = CPU work (no extra network)
+    //   These don't compete for the same resource, so it's tablet-safe!
+    uploadProgressText.value = 'MENGUNGGAH FOTO & MEMBUAT VIDEO...'
+    const [photoUrl, videoData] = await Promise.all([
+      uploadToLitterbox(photoFile),
+      compileCompositeVideo()
+    ])
+    uploadedPhotoUrlCache.value = photoUrl
+
+    // Step 3: Photo upload is done, now upload the video
+    uploadProgressText.value = 'MENGUNGGAH VIDEO...'
     const videoFile = new File([videoData.blob], `live.${videoData.fileExt}`, {
       type: videoData.blob.type,
     })
-    uploadedGifUrlCache.value = await uploadToLitterbox(videoFile)
+    const videoUrl = await uploadToLitterbox(videoFile)
+    uploadedGifUrlCache.value = videoUrl
 
-    uploadProgressText.value = 'MENYIAPKAN HALAMAN UNDUHAN (3/3)...'
+    // Step 4: Build & upload the HTML download page
+    uploadProgressText.value = 'MENYIAPKAN HALAMAN UNDUHAN...'
     const htmlContent = `<!DOCTYPE html>
 <html lang="id">
 <head>
@@ -601,7 +621,7 @@ function compileCompositeVideo() {
       const spacing = 0
       const fullW = baseW * 2 + spacing
       const fullH = baseH
-      const scale = 0.5
+      const scale = 0.4
       const outW = Math.round(fullW * scale)
       const outH = Math.round(fullH * scale)
 
@@ -731,7 +751,7 @@ function compileCompositeVideo() {
           ctx.strokeRect(baseW + 10, 10, baseW - 20, baseH - 20)
         }
 
-        uniqueFrameDataURLs.push(offscreen.toDataURL('image/jpeg', 0.85))
+        uniqueFrameDataURLs.push(offscreen.toDataURL('image/jpeg', 0.75))
       }
 
       videoProgress.value = 35
@@ -742,9 +762,9 @@ function compileCompositeVideo() {
         frameImages.push(await loadImage(dataUrl))
       }
 
-      // Repeat frames 3x for longer video
+      // Repeat frames 2x for shorter video (smaller file, faster upload)
       const repeatedFrames = []
-      for (let r = 0; r < 3; r++) {
+      for (let r = 0; r < 2; r++) {
         repeatedFrames.push(...frameImages)
       }
 
@@ -797,7 +817,7 @@ function compileCompositeVideo() {
           const stream = captureStreamFn(fps)
           const recorder = new MediaRecorder(stream, {
             mimeType: chosenMime,
-            videoBitsPerSecond: 2_000_000,
+            videoBitsPerSecond: 1_200_000,
           })
 
           const chunks = []
