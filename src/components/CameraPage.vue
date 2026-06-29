@@ -66,8 +66,11 @@ const ipCameraError = ref('')
 
 function loadIpCameraSettings() {
   const mode = localStorage.getItem('photobooth_ipcam_mode')
+  const savedDeviceId = localStorage.getItem('photobooth_camera_device_id')
   const url = localStorage.getItem('photobooth_ipcam_url')
-  ipCameraMode.value = mode === '1'
+  console.log('CameraPage: loadIpCameraSettings', { mode, savedDeviceId, url })
+  ipCameraMode.value = mode === '1' || savedDeviceId === 'ipcamera'
+  console.log('CameraPage: ipCameraMode =', ipCameraMode.value)
   if (url) ipCameraUrl.value = url
 }
 
@@ -149,12 +152,14 @@ async function startCamera() {
 
   // ── IP Camera mode ──────────────────────────────────────────────────────────
   if (ipCameraMode.value) {
-    await nextTick()
-    if (ipCameraImgEl.value) {
-      ipCameraImgEl.value.src = ipCameraUrl.value
-    }
+    // Set ipCameraActive FIRST so Vue renders the <img> element
     ipCameraActive.value = true
     streamActive.value = true
+    // Wait for Vue to render the <img ref="ipCameraImgEl"> element
+    await nextTick()
+    if (ipCameraImgEl.value && !ipCameraImgEl.value.src) {
+      ipCameraImgEl.value.src = ipCameraUrl.value
+    }
     return
   }
 
@@ -429,23 +434,29 @@ function capturePhoto(targetIndex = null) {
   // ── IP Camera mode: capture from <img> ──────────────────────────────────────
   if (ipCameraMode.value) {
     const imgEl = ipCameraImgEl.value
-    if (!imgEl || !imgEl.naturalWidth) return
-    const iw = imgEl.naturalWidth
-    const ih = imgEl.naturalHeight
+    if (!imgEl) return
+    // Use naturalWidth if available, otherwise fall back to rendered display size
+    const iw = imgEl.naturalWidth || imgEl.clientWidth || 640
+    const ih = imgEl.naturalHeight || imgEl.clientHeight || 480
     canvas.width = iw
     canvas.height = ih
     const ctx = canvas.getContext('2d')
-    ctx.drawImage(imgEl, 0, 0, iw, ih)
-    const nextPhoto = canvas.toDataURL('image/jpeg', 1.0)
-    if (targetIndex === null) {
-      photosList.value = [...photosList.value, nextPhoto]
-    } else {
-      const updated = [...photosList.value]
-      updated[targetIndex] = nextPhoto
-      photosList.value = updated
+    if (!ctx) return
+    try {
+      ctx.drawImage(imgEl, 0, 0, iw, ih)
+      const nextPhoto = canvas.toDataURL('image/jpeg', 1.0)
+      if (targetIndex === null) {
+        photosList.value = [...photosList.value, nextPhoto]
+      } else {
+        const updated = [...photosList.value]
+        updated[targetIndex] = nextPhoto
+        photosList.value = updated
+      }
+      showFlash.value = true
+      setTimeout(() => { showFlash.value = false }, 350)
+    } catch (e) {
+      console.warn('capturePhoto (IP cam) error:', e)
     }
-    showFlash.value = true
-    setTimeout(() => { showFlash.value = false }, 350)
     return
   }
 
@@ -500,7 +511,8 @@ function captureNext() {
     isCapturing.value = false
     statusText.value = '✅ Semua foto berhasil! Klik foto di kanan untuk retake, atau lanjut.'
     showSmile.value = false
-    stopCamera()
+    // Only stop camera for WebRTC mode. In IP Camera mode keep the stream alive for retakes.
+    if (!ipCameraMode.value) stopCamera()
     return
   }
 
@@ -766,12 +778,30 @@ function drawFramePreview() {
   drawAll()
 }
 
+// Re-init camera when the browser detects a device change (e.g., USB webcam plugged in)
+async function handleDeviceChange() {
+  // Only react to device changes in WebRTC mode; IP cam doesn't need this.
+  if (ipCameraMode.value) return
+  if (isCapturing.value) return
+  await retryCamera()
+}
+
 onMounted(() => {
-  startCamera()
+  loadIpCameraSettings()
+  // Use async IIFE so we can await startCamera properly
+  ;(async () => {
+    await startCamera()
+  })()
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+    navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange)
+  }
 })
 
 onUnmounted(() => {
   stopCamera()
+  if (navigator.mediaDevices && navigator.mediaDevices.removeEventListener) {
+    navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange)
+  }
 })
 
 watch(
@@ -925,7 +955,6 @@ const cameraAspectRatio = computed(() => {
               style="object-fit: cover; width: 100%; height: 100%; display: block; background: #111;"
               :src="ipCameraActive ? ipCameraUrl : ''"
               alt="IP Camera Stream"
-              crossorigin="anonymous"
               @error="ipCameraError = 'Tidak dapat memuat stream. Pastikan URL benar dan app IP Camera sudah berjalan.'"
               @load="ipCameraError = ''"
             />

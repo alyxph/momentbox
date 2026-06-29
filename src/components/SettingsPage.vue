@@ -53,7 +53,7 @@ function testIpCameraStream() {
     clearTimeout(timer)
     ipCameraTestStatus.value = 'error'
   }
-  img.src = url + '?' + Date.now()
+  img.src = url
 }
 
 async function loadCameraDevices() {
@@ -63,26 +63,45 @@ async function loadCameraDevices() {
     const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
     tempStream.getTracks().forEach((t) => t.stop())
   } catch (e) {
-    cameraPermissionError.value = 'Izinkan akses kamera di browser untuk melihat daftar kamera.'
-    return
+    // Don't return, allow proceeding so IP Camera is always available
+    cameraPermissionError.value = 'Izinkan akses kamera di browser untuk melihat daftar kamera lokal.'
   }
   try {
     const all = await navigator.mediaDevices.enumerateDevices()
-    cameraDevices.value = all.filter((d) => d.kind === 'videoinput')
-    // Muat deviceId tersimpan dari localStorage
-    const saved = localStorage.getItem('photobooth_camera_device_id')
-    if (saved && cameraDevices.value.find((d) => d.deviceId === saved)) {
-      selectedDeviceId.value = saved
-    } else if (cameraDevices.value.length > 0) {
-      selectedDeviceId.value = cameraDevices.value[0].deviceId
-    }
+    const webcams = all.filter((d) => d.kind === 'videoinput')
+    // Append the virtual IP Camera option
+    cameraDevices.value = [
+      ...webcams,
+      { deviceId: 'ipcamera', label: '📡 IP Camera / Web Stream (MJPEG)' }
+    ]
   } catch (err) {
-    cameraPermissionError.value = 'Gagal mendapatkan daftar kamera: ' + err.message
+    // If it fails, at least provide the IP Camera option
+    cameraDevices.value = [
+      { deviceId: 'ipcamera', label: '📡 IP Camera / Web Stream (MJPEG)' }
+    ]
+  }
+
+  // Muat deviceId/IP cam mode dari localStorage
+  const saved = localStorage.getItem('photobooth_camera_device_id')
+  const ipCamActive = localStorage.getItem('photobooth_ipcam_mode') === '1'
+  
+  if (ipCamActive) {
+    selectedDeviceId.value = 'ipcamera'
+  } else if (saved && cameraDevices.value.find((d) => d.deviceId === saved)) {
+    selectedDeviceId.value = saved
+  } else if (cameraDevices.value.length > 0) {
+    selectedDeviceId.value = cameraDevices.value[0].deviceId
   }
 }
 
 function saveCameraConfig() {
   localStorage.setItem('photobooth_camera_device_id', selectedDeviceId.value)
+  if (selectedDeviceId.value === 'ipcamera') {
+    localStorage.setItem('photobooth_ipcam_mode', '1')
+    localStorage.setItem('photobooth_ipcam_url', ipCameraUrl.value.trim())
+  } else {
+    localStorage.setItem('photobooth_ipcam_mode', '0')
+  }
   cameraSettingStatus.value = 'Pengaturan kamera berhasil disimpan!'
   setTimeout(() => {
     cameraSettingStatus.value = ''
@@ -1013,9 +1032,96 @@ onUnmounted(() => {
                 </div>
               </div>
 
-              <!-- Currently selected info -->
+              <!-- Integrated IP Camera URL Configuration -->
+              <div v-if="selectedDeviceId === 'ipcamera'" style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px; border-top: 3px dashed #000; padding-top: 14px;">
+                <label style="font-size: 13px; font-weight: 900; color: #000">URL STREAM MJPEG:</label>
+                <input
+                  id="ipcam-url-input"
+                  v-model="ipCameraUrl"
+                  type="url"
+                  placeholder="http://127.0.0.1:8080/video"
+                  style="
+                    width: 100%;
+                    padding: 12px 14px;
+                    font-size: 14px;
+                    font-weight: 700;
+                    font-family: 'Nunito', sans-serif;
+                    border: 4px solid #000;
+                    box-shadow: 4px 4px 0 #000;
+                    background: #fff;
+                    outline: none;
+                    box-sizing: border-box;
+                  "
+                />
+                <div
+                  style="
+                    background: #fef9c3;
+                    border: 3px solid #000;
+                    padding: 10px 14px;
+                    font-size: 11px;
+                    font-weight: 700;
+                    color: #713f12;
+                    line-height: 1.7;
+                  "
+                >
+                  💡 <strong>Cara pakai:</strong> Jalankan app <em>IP Webcam</em> / <em>USB Camera</em> di Android → colok webcam OTG → aktifkan server → ketik alamat URL stream di sini.
+                </div>
+
+                <!-- Test connection result -->
+                <div
+                  v-if="ipCameraTestStatus === 'ok'"
+                  style="
+                    background: #f0fdf4;
+                    border: 3px solid #000;
+                    padding: 10px 14px;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                  "
+                >
+                  <span style="font-size: 18px">✅</span>
+                  <span style="font-size: 12px; font-weight: 800; color: #166534">Stream terhubung!</span>
+                </div>
+                <div
+                  v-if="ipCameraTestStatus === 'error'"
+                  style="
+                    background: #fef2f2;
+                    border: 3px solid #000;
+                    padding: 10px 14px;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                  "
+                >
+                  <span style="font-size: 18px">❌</span>
+                  <span style="font-size: 12px; font-weight: 800; color: #991b1b">
+                    Tidak bisa terhubung. Pastikan URL benar dan server IP Camera sudah berjalan.
+                  </span>
+                </div>
+
+                <!-- Test Connection Button -->
+                <button
+                  class="btn-3d neo-btn"
+                  style="
+                    background: #00e5ff;
+                    color: #000;
+                    padding: 10px;
+                    font-size: 13px;
+                    font-weight: 800;
+                    border: 4px solid #000;
+                    box-shadow: 4px 4px 0 #000;
+                    margin-bottom: 4px;
+                  "
+                  :disabled="ipCameraTestStatus === 'testing'"
+                  @click="testIpCameraStream"
+                >
+                  {{ ipCameraTestStatus === 'testing' ? '⏳ Menguji...' : '🔌 TEST KONEKSI' }}
+                </button>
+              </div>
+
+              <!-- Currently selected info (WebRTC cameras only) -->
               <div
-                v-if="selectedDeviceId"
+                v-if="selectedDeviceId && selectedDeviceId !== 'ipcamera'"
                 style="
                   background: #f0fdf4;
                   border: 3px solid #000;
@@ -1069,232 +1175,6 @@ onUnmounted(() => {
                   flex: 1;
                 "
                 @click="saveCameraConfig"
-              >
-                💾 SIMPAN
-              </button>
-            </div>
-
-            <p
-              v-if="cameraSettingStatus"
-              style="
-                font-size: 14px;
-                font-weight: 900;
-                color: #10b981;
-                text-align: center;
-                margin-top: 12px;
-              "
-            >
-              {{ cameraSettingStatus }}
-            </p>
-          </div>
-
-          <!-- IP CAMERA (MJPEG) CARD -->
-          <div
-            class="neo-block"
-            style="
-              background: #fff;
-              padding: 28px;
-              border: 4px solid #000;
-              box-shadow: 6px 6px 0 #000;
-            "
-          >
-            <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 18px">
-              <div
-                style="
-                  width: 48px;
-                  height: 48px;
-                  background: #ff6b35;
-                  border: 4px solid #000;
-                  box-shadow: 4px 4px 0 #000;
-                  border-radius: 8px;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  font-size: 24px;
-                  flex-shrink: 0;
-                "
-              >
-                📡
-              </div>
-              <div>
-                <h3 class="neo-title" style="font-size: 20px; margin: 0">IP CAMERA (MJPEG)</h3>
-                <p style="font-size: 12px; font-weight: 700; color: #555; margin: 4px 0 0 0">
-                  Untuk kamera eksternal / webcam USB via app IP Camera
-                </p>
-              </div>
-            </div>
-
-            <!-- Toggle Mode -->
-            <div
-              style="
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                background: #f8fafc;
-                border: 3px solid #000;
-                padding: 14px 16px;
-                margin-bottom: 16px;
-                cursor: pointer;
-              "
-              @click="ipCameraMode = !ipCameraMode"
-            >
-              <div>
-                <div style="font-size: 14px; font-weight: 900; color: #000">Aktifkan Mode IP Camera</div>
-                <div style="font-size: 11px; font-weight: 700; color: #666; margin-top: 2px">
-                  Gunakan stream MJPEG dari app IP Webcam / USB Camera
-                </div>
-              </div>
-              <!-- Toggle switch -->
-              <div
-                style="
-                  width: 52px;
-                  height: 28px;
-                  border: 3px solid #000;
-                  box-shadow: 3px 3px 0 #000;
-                  border-radius: 14px;
-                  position: relative;
-                  transition: background 0.2s;
-                  flex-shrink: 0;
-                "
-                :style="{ background: ipCameraMode ? '#ff6b35' : '#ddd' }"
-              >
-                <div
-                  style="
-                    position: absolute;
-                    top: 2px;
-                    width: 18px;
-                    height: 18px;
-                    background: #fff;
-                    border: 2px solid #000;
-                    border-radius: 50%;
-                    transition: left 0.2s;
-                  "
-                  :style="{ left: ipCameraMode ? '28px' : '2px' }"
-                />
-              </div>
-            </div>
-
-            <!-- URL Input (only shown when mode active) -->
-            <div v-if="ipCameraMode" style="display: flex; flex-direction: column; gap: 12px">
-              <label style="font-size: 13px; font-weight: 900; color: #000">URL STREAM MJPEG:</label>
-              <input
-                id="ipcam-url-input"
-                v-model="ipCameraUrl"
-                type="url"
-                placeholder="http://127.0.0.1:8080/video"
-                style="
-                  width: 100%;
-                  padding: 12px 14px;
-                  font-size: 14px;
-                  font-weight: 700;
-                  font-family: 'Nunito', sans-serif;
-                  border: 4px solid #000;
-                  box-shadow: 4px 4px 0 #000;
-                  background: #fff;
-                  outline: none;
-                  box-sizing: border-box;
-                "
-              />
-              <div
-                style="
-                  background: #fef9c3;
-                  border: 3px solid #000;
-                  padding: 10px 14px;
-                  font-size: 11px;
-                  font-weight: 700;
-                  color: #713f12;
-                  line-height: 1.7;
-                "
-              >
-                💡 <strong>Cara pakai:</strong> Install app <em>IP Webcam</em> atau <em>USB Camera</em>
-                di Android → colok webcam OTG → aktifkan server di app → salin URL-nya ke sini
-                (biasanya <code>http://127.0.0.1:8080/video</code>).
-              </div>
-
-              <!-- Test connection result -->
-              <div
-                v-if="ipCameraTestStatus === 'ok'"
-                style="
-                  background: #f0fdf4;
-                  border: 3px solid #000;
-                  padding: 10px 14px;
-                  display: flex;
-                  align-items: center;
-                  gap: 8px;
-                "
-              >
-                <span style="font-size: 18px">✅</span>
-                <span style="font-size: 12px; font-weight: 800; color: #166534">Stream terhubung!</span>
-              </div>
-              <div
-                v-if="ipCameraTestStatus === 'error'"
-                style="
-                  background: #fef2f2;
-                  border: 3px solid #000;
-                  padding: 10px 14px;
-                  display: flex;
-                  align-items: center;
-                  gap: 8px;
-                "
-              >
-                <span style="font-size: 18px">❌</span>
-                <span style="font-size: 12px; font-weight: 800; color: #991b1b">
-                  Tidak bisa terhubung. Pastikan URL benar dan app IP Camera sudah berjalan.
-                </span>
-              </div>
-
-              <!-- Action buttons -->
-              <div style="display: flex; gap: 10px">
-                <button
-                  class="btn-3d neo-btn"
-                  style="
-                    background: #00e5ff;
-                    color: #000;
-                    padding: 12px 16px;
-                    font-size: 13px;
-                    font-weight: 800;
-                    border: 4px solid #000;
-                    box-shadow: 4px 4px 0 #000;
-                    flex: 1;
-                  "
-                  :disabled="ipCameraTestStatus === 'testing'"
-                  @click="testIpCameraStream"
-                >
-                  {{ ipCameraTestStatus === 'testing' ? '⏳ Menguji...' : '🔌 TEST KONEKSI' }}
-                </button>
-                <button
-                  class="btn-3d neo-btn"
-                  style="
-                    background: #ff4cb0;
-                    color: #fff;
-                    padding: 12px 16px;
-                    font-size: 13px;
-                    font-weight: 800;
-                    border: 4px solid #000;
-                    box-shadow: 4px 4px 0 #000;
-                    flex: 1;
-                  "
-                  @click="saveIpCameraSettings"
-                >
-                  💾 SIMPAN
-                </button>
-              </div>
-            </div>
-
-            <!-- Save button when mode is off (to save the off state) -->
-            <div v-if="!ipCameraMode" style="margin-top: 8px">
-              <button
-                class="btn-3d neo-btn"
-                style="
-                  background: #ff4cb0;
-                  color: #fff;
-                  padding: 10px 20px;
-                  font-size: 13px;
-                  font-weight: 800;
-                  border: 4px solid #000;
-                  box-shadow: 4px 4px 0 #000;
-                "
-                @click="saveIpCameraSettings"
               >
                 💾 SIMPAN
               </button>
