@@ -8,8 +8,102 @@ const emit = defineEmits(['go-home', 'save', 'delete']);
 const view = ref('menu'); // 'menu' or 'editor'
 const currentLayoutId = ref(null);
 
-// Settings Tab switcher: 'frames' or 'buttons'
+// Settings Tab switcher: 'frames', 'buttons', or 'camera'
 const activeSettingTab = ref('frames');
+
+// ── CAMERA SETTINGS ──────────────────────────────────────────────────────────
+const cameraDevices = ref([]);
+const selectedDeviceId = ref('');
+const cameraSettingStatus = ref('');
+const cameraPermissionError = ref('');
+
+async function loadCameraDevices() {
+  cameraPermissionError.value = '';
+  try {
+    // Minta izin kamera dulu agar label perangkat dapat terbaca
+    const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    tempStream.getTracks().forEach(t => t.stop());
+  } catch (e) {
+    cameraPermissionError.value = 'Izinkan akses kamera di browser untuk melihat daftar kamera.';
+    return;
+  }
+  try {
+    const all = await navigator.mediaDevices.enumerateDevices();
+    cameraDevices.value = all.filter(d => d.kind === 'videoinput');
+    // Muat deviceId tersimpan dari localStorage
+    const saved = localStorage.getItem('photobooth_camera_device_id');
+    if (saved && cameraDevices.value.find(d => d.deviceId === saved)) {
+      selectedDeviceId.value = saved;
+    } else if (cameraDevices.value.length > 0) {
+      selectedDeviceId.value = cameraDevices.value[0].deviceId;
+    }
+  } catch (err) {
+    cameraPermissionError.value = 'Gagal mendapatkan daftar kamera: ' + err.message;
+  }
+}
+
+function saveCameraConfig() {
+  localStorage.setItem('photobooth_camera_device_id', selectedDeviceId.value);
+  cameraSettingStatus.value = 'Pengaturan kamera berhasil disimpan!';
+  setTimeout(() => {
+    cameraSettingStatus.value = '';
+  }, 2500);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── WALLPAPER SETTINGS ───────────────────────────────────────────────────────
+const wallpaperInputRef = ref(null);
+const wallpaperPreview = ref('');
+const wallpaperStatus = ref('');
+const wallpaperError = ref('');
+
+function loadWallpaperPreview() {
+  const saved = localStorage.getItem('photobooth_wallpaper');
+  wallpaperPreview.value = saved || '';
+}
+
+function openWallpaperPicker() {
+  wallpaperInputRef.value?.click();
+}
+
+function handleWallpaperUpload(event) {
+  wallpaperError.value = '';
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  // Warn if file is too large (> 2.5MB)
+  if (file.size > 2.5 * 1024 * 1024) {
+    wallpaperError.value = 'Gambar terlalu besar (> 2.5MB). Harap pilih gambar yang lebih kecil agar tidak melebihi kapasitas penyimpanan browser.';
+    event.target.value = '';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const base64 = e.target.result;
+    wallpaperPreview.value = base64;
+    try {
+      localStorage.setItem('photobooth_wallpaper', base64);
+      // Notify HomePage (same tab) of the change
+      window.dispatchEvent(new CustomEvent('photobooth-wallpaper-changed'));
+      wallpaperStatus.value = 'Wallpaper berhasil disimpan!';
+      setTimeout(() => { wallpaperStatus.value = ''; }, 2500);
+    } catch (err) {
+      wallpaperError.value = 'Gagal menyimpan: penyimpanan browser penuh. Coba pakai gambar yang lebih kecil.';
+    }
+  };
+  reader.readAsDataURL(file);
+  event.target.value = '';
+}
+
+function deleteWallpaper() {
+  localStorage.removeItem('photobooth_wallpaper');
+  wallpaperPreview.value = '';
+  window.dispatchEvent(new CustomEvent('photobooth-wallpaper-changed'));
+  wallpaperStatus.value = 'Wallpaper dihapus. Tampilan default aktif kembali.';
+  setTimeout(() => { wallpaperStatus.value = ''; }, 2500);
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Config toggles for buttons shown in PreviewPage
 const previewButtons = ref({
@@ -369,7 +463,7 @@ onUnmounted(() => {
           SETTINGS
         </h1>
         <p class="neo-chip" style="font-size: 12px; font-weight: 800; display: inline-block; margin-top: 8px; background: #00e5ff; color: #000; padding: 6px 14px;">
-          {{ view === 'menu' ? (activeSettingTab === 'frames' ? 'MANAGE CUSTOM FRAMES' : 'CUSTOM BUTTONS') : 'EDITING: ' + customDisplayName }}
+          {{ view === 'menu' ? (activeSettingTab === 'frames' ? 'MANAGE CUSTOM FRAMES' : activeSettingTab === 'buttons' ? 'CUSTOM BUTTONS' : activeSettingTab === 'camera' ? 'SETTING KAMERA' : 'CUSTOM WALLPAPER') : 'EDITING: ' + customDisplayName }}
         </p>
       </header>
 
@@ -390,6 +484,22 @@ onUnmounted(() => {
           @click="activeSettingTab = 'buttons'"
         >
           KUSTOMISASI TOMBOL
+        </button>
+        <button
+          class="btn-3d neo-btn"
+          style="padding: 10px 24px; font-size: 14px; font-weight: 800; border: 3px solid #000; box-shadow: 4px 4px 0 #000;"
+          :style="{ background: activeSettingTab === 'camera' ? '#a78bfa' : '#fff', color: activeSettingTab === 'camera' ? '#fff' : '#000' }"
+          @click="activeSettingTab = 'camera'; loadCameraDevices()"
+        >
+          🎥 KAMERA
+        </button>
+        <button
+          class="btn-3d neo-btn"
+          style="padding: 10px 24px; font-size: 14px; font-weight: 800; border: 3px solid #000; box-shadow: 4px 4px 0 #000;"
+          :style="{ background: activeSettingTab === 'wallpaper' ? '#f97316' : '#fff', color: activeSettingTab === 'wallpaper' ? '#fff' : '#000' }"
+          @click="activeSettingTab = 'wallpaper'; loadWallpaperPreview()"
+        >
+          🖼️ WALLPAPER
         </button>
       </div>
 
@@ -471,6 +581,209 @@ onUnmounted(() => {
             <p v-if="buttonSaveStatus" style="font-size: 14px; font-weight: 900; color: #10b981; text-align: center; margin-top: 5px;">
               {{ buttonSaveStatus }}
             </p>
+          </div>
+        </div>
+
+        <!-- CAMERA TAB CONTENT -->
+        <div v-else-if="activeSettingTab === 'camera'" style="display: flex; flex-direction: column; gap: 16px; max-width: 650px; margin: 0 auto; width: 100%;">
+          
+          <!-- Error / permission notice -->
+          <div
+            v-if="cameraPermissionError"
+            class="neo-block"
+            style="background: #fff3cd; border: 4px solid #000; box-shadow: 6px 6px 0 #000; padding: 20px; display: flex; align-items: center; gap: 14px;"
+          >
+            <span style="font-size: 28px;">⚠️</span>
+            <p style="font-size: 13px; font-weight: 700; margin: 0; color: #6b4f00;">{{ cameraPermissionError }}</p>
+          </div>
+
+          <!-- Camera selector card -->
+          <div
+            class="neo-block"
+            style="background: #ffffff; padding: 28px; border: 4px solid #000; box-shadow: 6px 6px 0 #000;"
+          >
+            <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 20px;">
+              <div style="width: 48px; height: 48px; background: #a78bfa; border: 4px solid #000; box-shadow: 4px 4px 0 #000; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;">🎥</div>
+              <div>
+                <h3 class="neo-title" style="font-size: 20px; margin: 0;">PILIH KAMERA</h3>
+                <p style="font-size: 12px; font-weight: 700; color: #555; margin: 4px 0 0 0;">Pilih kamera yang ingin digunakan saat memotret</p>
+              </div>
+            </div>
+
+            <!-- No devices found -->
+            <div
+              v-if="cameraDevices.length === 0 && !cameraPermissionError"
+              style="text-align: center; padding: 30px; border: 3px dashed #000; background: #f8fafc;"
+            >
+              <div style="font-size: 40px; margin-bottom: 8px;">📷</div>
+              <p style="font-weight: 800; font-size: 14px; color: #888;">Klik tombol di bawah untuk memuat daftar kamera</p>
+            </div>
+
+            <!-- Dropdown device list -->
+            <div v-if="cameraDevices.length > 0" style="display: flex; flex-direction: column; gap: 12px;">
+              <label style="font-size: 13px; font-weight: 900; color: #000;">KAMERA TERSEDIA:</label>
+              <div style="position: relative;">
+                <select
+                  id="camera-device-select"
+                  v-model="selectedDeviceId"
+                  style="width: 100%; padding: 12px 40px 12px 14px; font-size: 14px; font-weight: 800; font-family: 'Nunito', sans-serif; border: 4px solid #000; box-shadow: 4px 4px 0 #000; background: #fff; appearance: none; cursor: pointer; outline: none;"
+                >
+                  <option
+                    v-for="device in cameraDevices"
+                    :key="device.deviceId"
+                    :value="device.deviceId"
+                  >
+                    {{ device.label || `Kamera ${cameraDevices.indexOf(device) + 1}` }}
+                  </option>
+                </select>
+                <!-- Custom dropdown arrow -->
+                <div style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); pointer-events: none; font-weight: 900; font-size: 16px;">▼</div>
+              </div>
+
+              <!-- Currently selected info -->
+              <div
+                v-if="selectedDeviceId"
+                style="background: #f0fdf4; border: 3px solid #000; padding: 10px 14px; display: flex; align-items: center; gap: 10px;"
+              >
+                <span style="font-size: 18px;">✅</span>
+                <span style="font-size: 12px; font-weight: 800; color: #166534; word-break: break-all;">
+                  {{ cameraDevices.find(d => d.deviceId === selectedDeviceId)?.label || 'Kamera Terpilih' }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div style="display: flex; gap: 12px; margin-top: 20px;">
+              <button
+                class="btn-3d neo-btn"
+                style="background: #a78bfa; color: #fff; padding: 12px 20px; font-size: 14px; font-weight: 800; border: 4px solid #000; box-shadow: 4px 4px 0 #000; flex: 1;"
+                @click="loadCameraDevices"
+              >
+                🔄 MUAT ULANG
+              </button>
+              <button
+                v-if="cameraDevices.length > 0"
+                class="btn-3d neo-btn"
+                style="background: #ff4cb0; color: #fff; padding: 12px 20px; font-size: 14px; font-weight: 800; border: 4px solid #000; box-shadow: 4px 4px 0 #000; flex: 1;"
+                @click="saveCameraConfig"
+              >
+                💾 SIMPAN
+              </button>
+            </div>
+
+            <p v-if="cameraSettingStatus" style="font-size: 14px; font-weight: 900; color: #10b981; text-align: center; margin-top: 12px;">
+              {{ cameraSettingStatus }}
+            </p>
+          </div>
+
+          <!-- Info card -->
+          <div
+            class="neo-block"
+            style="background: #e0f2fe; padding: 18px; border: 4px solid #000; box-shadow: 6px 6px 0 #000;"
+          >
+            <h4 class="neo-title" style="font-size: 14px; margin: 0 0 8px 0;">ℹ️ INFO</h4>
+            <ul style="margin: 0; padding-left: 18px; font-size: 12px; font-weight: 700; color: #0c4a6e; line-height: 1.8;">
+              <li>Pengaturan kamera akan disimpan dan dipakai setiap kali memotret.</li>
+              <li>Jika kamera yang dipilih tidak tersedia, aplikasi akan otomatis memilih kamera default.</li>
+              <li>Pada perangkat mobile, kamera depan biasanya berlabel "user" / "front".</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- WALLPAPER TAB CONTENT -->
+        <div v-else-if="activeSettingTab === 'wallpaper'" style="display: flex; flex-direction: column; gap: 16px; max-width: 650px; margin: 0 auto; width: 100%;">
+
+          <!-- Error / size warning -->
+          <div
+            v-if="wallpaperError"
+            class="neo-block"
+            style="background: #fff3cd; border: 4px solid #000; box-shadow: 6px 6px 0 #000; padding: 20px; display: flex; align-items: center; gap: 14px;"
+          >
+            <span style="font-size: 28px;">⚠️</span>
+            <p style="font-size: 13px; font-weight: 700; margin: 0; color: #6b4f00;">{{ wallpaperError }}</p>
+          </div>
+
+          <!-- Main card -->
+          <div
+            class="neo-block"
+            style="background: #ffffff; padding: 28px; border: 4px solid #000; box-shadow: 6px 6px 0 #000;"
+          >
+            <!-- Header -->
+            <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 20px;">
+              <div style="width: 48px; height: 48px; background: #f97316; border: 4px solid #000; box-shadow: 4px 4px 0 #000; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;">🖼️</div>
+              <div>
+                <h3 class="neo-title" style="font-size: 20px; margin: 0;">CUSTOM WALLPAPER</h3>
+                <p style="font-size: 12px; font-weight: 700; color: #555; margin: 4px 0 0 0;">Upload foto/gambar untuk background halaman depan</p>
+              </div>
+            </div>
+
+            <!-- Current wallpaper preview -->
+            <div
+              style="border: 4px solid #000; box-shadow: 4px 4px 0 #000; overflow: hidden; margin-bottom: 20px; background: #f8fafc; min-height: 160px; display: flex; align-items: center; justify-content: center; position: relative;"
+            >
+              <img
+                v-if="wallpaperPreview"
+                :src="wallpaperPreview"
+                style="width: 100%; max-height: 260px; object-fit: cover; display: block;"
+                alt="Wallpaper preview"
+              />
+              <div v-else style="text-align: center; padding: 40px; opacity: 0.5;">
+                <div style="font-size: 48px; margin-bottom: 8px;">🏞️</div>
+                <p style="font-weight: 800; font-size: 13px; color: #888; margin: 0;">Belum ada wallpaper</p>
+                <p style="font-weight: 700; font-size: 11px; color: #aaa; margin: 4px 0 0 0;">Tampilan default aktif</p>
+              </div>
+              <!-- Active badge -->
+              <div
+                v-if="wallpaperPreview"
+                style="position: absolute; top: 10px; left: 10px; background: #10b981; border: 3px solid #000; padding: 4px 12px; font-size: 11px; font-weight: 900; color: #fff; box-shadow: 3px 3px 0 #000;"
+              >
+                ✓ AKTIF
+              </div>
+            </div>
+
+            <!-- Upload input (hidden) -->
+            <input
+              ref="wallpaperInputRef"
+              type="file"
+              accept="image/*"
+              style="display: none;"
+              @change="handleWallpaperUpload"
+            />
+
+            <!-- Action buttons -->
+            <div style="display: flex; gap: 12px;">
+              <button
+                class="btn-3d neo-btn"
+                style="background: #f97316; color: #fff; padding: 14px 20px; font-size: 14px; font-weight: 800; border: 4px solid #000; box-shadow: 4px 4px 0 #000; flex: 1;"
+                @click="openWallpaperPicker"
+              >
+                📁 {{ wallpaperPreview ? 'GANTI GAMBAR' : 'UPLOAD GAMBAR' }}
+              </button>
+              <button
+                v-if="wallpaperPreview"
+                class="btn-3d neo-btn"
+                style="background: #ef4444; color: #fff; padding: 14px 20px; font-size: 14px; font-weight: 800; border: 4px solid #000; box-shadow: 4px 4px 0 #000; flex: 1;"
+                @click="deleteWallpaper"
+              >
+                🗑️ HAPUS
+              </button>
+            </div>
+
+            <p v-if="wallpaperStatus" style="font-size: 14px; font-weight: 900; color: #10b981; text-align: center; margin-top: 14px;">{{ wallpaperStatus }}</p>
+          </div>
+
+          <!-- Info card -->
+          <div
+            class="neo-block"
+            style="background: #fff7ed; padding: 18px; border: 4px solid #000; box-shadow: 6px 6px 0 #000;"
+          >
+            <h4 class="neo-title" style="font-size: 14px; margin: 0 0 8px 0;">ℹ️ INFO</h4>
+            <ul style="margin: 0; padding-left: 18px; font-size: 12px; font-weight: 700; color: #7c2d12; line-height: 1.8;">
+              <li>Wallpaper akan tampil full-screen di halaman utama. Judul &amp; dekorasi akan disembunyikan.</li>
+              <li>Yang tetap terlihat: <strong>tombol kamera</strong>, label <strong>KLIK UNTUK MULAI</strong>, dan tombol <strong>Settings</strong>.</li>
+              <li>Ukuran gambar disarankan <strong>&lt; 2MB</strong> agar tidak melebihi kapasitas penyimpanan browser.</li>
+              <li>Format yang didukung: JPG, PNG, WebP, GIF, dsb.</li>
+            </ul>
           </div>
         </div>
 

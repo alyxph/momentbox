@@ -1,7 +1,7 @@
 export const frames = [
   {
     id: 'beach',
-    name: 'BEACH SUMMER',
+    name: 'MOMENTBOX',
     pattern: 'WAVES PATTERN',
     bg: '#E0F7FA',
     accent: '#0891B2',

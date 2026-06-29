@@ -621,7 +621,7 @@ function compileCompositeVideo() {
       const spacing = 0
       const fullW = baseW * 2 + spacing
       const fullH = baseH
-      const scale = 0.4
+      const scale = 1.0
       const outW = Math.round(fullW * scale)
       const outH = Math.round(fullH * scale)
 
@@ -751,7 +751,7 @@ function compileCompositeVideo() {
           ctx.strokeRect(baseW + 10, 10, baseW - 20, baseH - 20)
         }
 
-        uniqueFrameDataURLs.push(offscreen.toDataURL('image/jpeg', 0.75))
+        uniqueFrameDataURLs.push(offscreen.toDataURL('image/png'))
       }
 
       videoProgress.value = 35
@@ -808,7 +808,7 @@ function compileCompositeVideo() {
 
           const isMP4 = chosenMime.includes('mp4')
           const fileExt = isMP4 ? 'mp4' : 'webm'
-          const fps = 10
+          const fps = 15
           const frameDurationMs = 1000 / fps
 
           const captureStreamFn =
@@ -817,7 +817,7 @@ function compileCompositeVideo() {
           const stream = captureStreamFn(fps)
           const recorder = new MediaRecorder(stream, {
             mimeType: chosenMime,
-            videoBitsPerSecond: 1_200_000,
+            videoBitsPerSecond: 5_000_000,
           })
 
           const chunks = []
@@ -887,10 +887,11 @@ function compileCompositeVideo() {
             images: gifFrames,
             gifWidth: outW,
             gifHeight: outH,
-            interval: 0.12,
+            interval: 0.1,
             numFrames: gifFrames.length,
             frameDuration: 1,
-            sampleInterval: 15,
+            sampleInterval: 5,
+            numWorkers: 4,
           },
           (obj) => {
             videoProgress.value = 95
@@ -1108,7 +1109,12 @@ onUnmounted(() => {
                 }"
               >
                 <div v-if="gifs[idx] === 'loading'" class="gif-loader-container">
-                  <div class="gif-spinner"></div>
+                  <div class="gif-spinner-blocks">
+                    <div class="gif-spinner-block"></div>
+                    <div class="gif-spinner-block"></div>
+                    <div class="gif-spinner-block"></div>
+                  </div>
+                  <div class="gif-loading-text">LOADING</div>
                 </div>
                 <img
                   v-else-if="gifs[idx]"
@@ -1215,7 +1221,12 @@ onUnmounted(() => {
                 }"
               >
                 <div v-if="gifs[[1, 3, 0, 2][idx]] === 'loading'" class="gif-loader-container">
-                  <div class="gif-spinner"></div>
+                  <div class="gif-spinner-blocks">
+                    <div class="gif-spinner-block"></div>
+                    <div class="gif-spinner-block"></div>
+                    <div class="gif-spinner-block"></div>
+                  </div>
+                  <div class="gif-loading-text">LOADING</div>
                 </div>
                 <img
                   v-else-if="gifs[[1, 3, 0, 2][idx]]"
@@ -1348,17 +1359,12 @@ onUnmounted(() => {
             v-if="!qrUrl"
             style="display: flex; flex-direction: column; align-items: center; gap: 15px"
           >
-            <div
-              style="
-                width: 50px;
-                height: 50px;
-                border: 6px solid #ff4cb0;
-                border-top-color: transparent;
-                border-radius: 50%;
-                animation: spin 1s linear infinite;
-              "
-            ></div>
-            <p style="font-weight: 800; font-size: 14px; color: #000">
+            <div class="gif-spinner-blocks">
+              <div class="gif-spinner-block"></div>
+              <div class="gif-spinner-block"></div>
+              <div class="gif-spinner-block"></div>
+            </div>
+            <p style="font-weight: 800; font-size: 14px; color: #000; font-family: 'Bangers', cursive; letter-spacing: 1px; animation: pulse-text 0.8s infinite alternate;">
               {{ uploadProgressText || 'MENGUNGGAH...' }}
             </p>
           </div>
@@ -1382,11 +1388,6 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
 @keyframes bounceIn {
   0% {
     transform: scale(0.3);
@@ -1411,16 +1412,43 @@ onUnmounted(() => {
   justify-content: center;
   width: 100%;
   height: 100%;
-  background: #222;
+  background: #f6f1e9;
+  gap: 12px;
 }
 
-.gif-spinner {
-  width: 32px;
-  height: 32px;
-  border: 4px solid #ff4cb0;
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
+.gif-spinner-blocks {
+  display: flex;
+  gap: 6px;
+}
+
+.gif-spinner-block {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #000;
+  box-shadow: 2px 2px 0 #000;
+  animation: bounce-block 0.6s infinite alternate;
+}
+
+.gif-spinner-block:nth-child(1) { background: #ff4cb0; animation-delay: 0s; }
+.gif-spinner-block:nth-child(2) { background: #00e5ff; animation-delay: 0.2s; }
+.gif-spinner-block:nth-child(3) { background: #ffd700; animation-delay: 0.4s; }
+
+@keyframes bounce-block {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-10px); }
+}
+
+.gif-loading-text {
+  font-family: 'Bangers', cursive;
+  font-size: 16px;
+  letter-spacing: 2px;
+  color: #000;
+  animation: pulse-text 0.8s infinite alternate;
+}
+
+@keyframes pulse-text {
+  0% { opacity: 0.4; }
+  100% { opacity: 1; }
 }
 
 /* ===== LAYOUT ===== */

@@ -1,8 +1,8 @@
 <script setup>
-import { computed, ref, onMounted } from 'vue';
-import { Swiper, SwiperSlide } from 'swiper/vue';
-import 'swiper/css';
-import { frameConfigs } from '../data/frames';
+import { computed, ref, onMounted } from 'vue'
+import { Swiper, SwiperSlide } from 'swiper/vue'
+import 'swiper/css'
+import { frameConfigs } from '../data/frames'
 
 const props = defineProps({
   frames: {
@@ -21,12 +21,12 @@ const props = defineProps({
     type: Object,
     default: null,
   },
-});
+})
 
-const emit = defineEmits(['select', 'go-home']);
+const emit = defineEmits(['select', 'go-home'])
 
 const allFrames = computed(() => {
-  const customOnes = props.customLayouts.map(layout => ({
+  const customOnes = props.customLayouts.map((layout) => ({
     ...layout,
     id: layout.id,
     name: layout.name || 'CUSTOM FRAME',
@@ -36,87 +36,88 @@ const allFrames = computed(() => {
     patternBg: '#f0f9ff',
     btnText: '#000',
     isCustom: true,
-  }));
-  
-  return [...customOnes, ...props.frames];
-});
+  }))
 
-const selectedLocalFrame = ref(null);
-const swiperRef = ref(null);
+  return [...customOnes, ...props.frames]
+})
+
+const selectedLocalFrame = ref(null)
+const swiperRef = ref(null)
 
 const swiperBreakpoints = {
   320: {
-    spaceBetween: 18
+    spaceBetween: 18,
   },
   768: {
-    spaceBetween: 28
-  }
-};
+    spaceBetween: 28,
+  },
+}
 
 const carouselSlides = computed(() => {
-  const list = allFrames.value;
-  if (list.length === 0) return [];
-  
+  const list = allFrames.value
+  if (list.length === 0) return []
+
   // Duplicate list until there are enough items for smooth infinite loop
-  let duplicatedList = [...list];
+  let duplicatedList = [...list]
   while (duplicatedList.length < 12) {
-    duplicatedList = [...duplicatedList, ...list];
+    duplicatedList = [...duplicatedList, ...list]
   }
-  return duplicatedList;
-});
+  return duplicatedList
+})
 
 onMounted(() => {
   if (props.selectedFrame) {
-    selectedLocalFrame.value = allFrames.value.find(f => f.id === props.selectedFrame.id) || allFrames.value[0];
+    selectedLocalFrame.value =
+      allFrames.value.find((f) => f.id === props.selectedFrame.id) || allFrames.value[0]
   } else {
-    selectedLocalFrame.value = allFrames.value[0];
+    selectedLocalFrame.value = allFrames.value[0]
   }
-});
+})
 
 const onSwiper = (swiper) => {
-  swiperRef.value = swiper;
+  swiperRef.value = swiper
   if (selectedLocalFrame.value) {
-    const originalIndex = allFrames.value.findIndex(f => f.id === selectedLocalFrame.value.id);
+    const originalIndex = allFrames.value.findIndex((f) => f.id === selectedLocalFrame.value.id)
     if (originalIndex >= 0) {
-      const N = allFrames.value.length;
-      const startIndex = N < 8 ? N + originalIndex : originalIndex;
-      swiper.slideToLoop(startIndex, 0);
+      const N = allFrames.value.length
+      const startIndex = N < 8 ? N + originalIndex : originalIndex
+      swiper.slideToLoop(startIndex, 0)
     }
   }
-};
+}
 
 const onSlideChange = () => {
   if (swiperRef.value) {
-    const realIndex = swiperRef.value.realIndex;
-    const N = allFrames.value.length;
-    const actualIndex = N > 0 ? realIndex % N : 0;
+    const realIndex = swiperRef.value.realIndex
+    const N = allFrames.value.length
+    const actualIndex = N > 0 ? realIndex % N : 0
     if (allFrames.value[actualIndex]) {
-      selectedLocalFrame.value = allFrames.value[actualIndex];
+      selectedLocalFrame.value = allFrames.value[actualIndex]
     }
   }
-};
+}
 
 function selectFrame(frame) {
-  selectedLocalFrame.value = frame;
+  selectedLocalFrame.value = frame
   if (swiperRef.value) {
-    const N = allFrames.value.length;
-    const originalIndex = allFrames.value.findIndex(f => f.id === frame.id);
+    const N = allFrames.value.length
+    const originalIndex = allFrames.value.findIndex((f) => f.id === frame.id)
     if (originalIndex >= 0) {
       if (N < 8) {
-        const currentIndex = swiperRef.value.realIndex;
-        const copies = [originalIndex, originalIndex + N, originalIndex + 2 * N];
-        let bestIndex = copies[0];
-        let minDistance = Infinity;
+        const currentIndex = swiperRef.value.realIndex
+        const copies = [originalIndex, originalIndex + N, originalIndex + 2 * N]
+        let bestIndex = copies[0]
+        let minDistance = Infinity
         for (const copy of copies) {
-          const distance = Math.abs(copy - currentIndex);
+          const distance = Math.abs(copy - currentIndex)
           if (distance < minDistance) {
-            minDistance = distance;
-            bestIndex = copy;
+            minDistance = distance
+            bestIndex = copy
           }
         }
-        swiperRef.value.slideToLoop(bestIndex, 300);
+        swiperRef.value.slideToLoop(bestIndex, 300)
       } else {
-        swiperRef.value.slideToLoop(originalIndex, 300);
+        swiperRef.value.slideToLoop(originalIndex, 300)
       }
     }
   }
@@ -124,21 +125,21 @@ function selectFrame(frame) {
 
 function handleNext() {
   if (selectedLocalFrame.value) {
-    emit('select', selectedLocalFrame.value);
+    emit('select', selectedLocalFrame.value)
   }
 }
 
 function scrollLeft() {
-  swiperRef.value?.slidePrev();
+  swiperRef.value?.slidePrev()
 }
 
 function scrollRight() {
-  swiperRef.value?.slideNext();
+  swiperRef.value?.slideNext()
 }
 
 function getBoxStyle(box, frame) {
-  const fw = frame.frame?.width || 600;
-  const fh = frame.frame?.height || 1800;
+  const fw = frame.frame?.width || 600
+  const fh = frame.frame?.height || 1800
   return {
     left: `${(box.x / fw) * 100}%`,
     top: `${(box.y / fh) * 100}%`,
@@ -149,15 +150,15 @@ function getBoxStyle(box, frame) {
     borderRadius: '4px',
     boxShadow: 'inset 0 0 8px rgba(0, 0, 0, 0.4)',
     border: '1.5px solid rgba(255, 255, 255, 0.1)',
-  };
+  }
 }
 
 const defaultBoxes = [
   { id: 1, x: 40, y: 240, width: 520, height: 345 },
   { id: 2, x: 40, y: 605, width: 520, height: 345 },
   { id: 3, x: 40, y: 970, width: 520, height: 345 },
-  { id: 4, x: 40, y: 1335, width: 520, height: 345 }
-];
+  { id: 4, x: 40, y: 1335, width: 520, height: 345 },
+]
 </script>
 
 <template>
@@ -167,12 +168,14 @@ const defaultBoxes = [
     <div class="blob blob-orange"></div>
 
     <!-- Floating Back Button -->
-    <button
-      class="back-button-floating"
-      @click="emit('go-home')"
-      title="Kembali ke Beranda"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <button class="back-button-floating" @click="emit('go-home')" title="Kembali ke Beranda">
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
         <line x1="18" y1="6" x2="6" y2="18"></line>
         <line x1="6" y1="6" x2="18" y2="18"></line>
       </svg>
@@ -187,7 +190,15 @@ const defaultBoxes = [
     <div class="carousel-container-outer">
       <!-- Left Arrow -->
       <button class="carousel-nav-btn prev-btn" @click="scrollLeft" aria-label="Sebelumnya">
-        <svg style="width: 20px; height: 20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          style="width: 20px; height: 20px"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="4.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <polyline points="15 18 9 12 15 6"></polyline>
         </svg>
       </button>
@@ -209,17 +220,18 @@ const defaultBoxes = [
         >
           <div
             class="frame-card-new"
-            :class="{ 'selected': selectedLocalFrame && selectedLocalFrame.id === frame.id }"
+            :class="{ selected: selectedLocalFrame && selectedLocalFrame.id === frame.id }"
             @click="selectFrame(frame)"
           >
             <!-- Frame Strip Container wrapper -->
             <div class="frame-strip-wrapper">
-              
               <!-- Custom/Preset Frame (Image Overlay + Purple Placeholders) -->
-              <div 
-                v-if="frame.frameUrl" 
-                class="frame-strip-container" 
-                :style="{ aspectRatio: (frame.frame?.width || 600) + '/' + (frame.frame?.height || 1800) }"
+              <div
+                v-if="frame.frameUrl"
+                class="frame-strip-container"
+                :style="{
+                  aspectRatio: (frame.frame?.width || 600) + '/' + (frame.frame?.height || 1800),
+                }"
               >
                 <!-- Absolute Purple Placeholders Behind PNG -->
                 <div
@@ -232,15 +244,22 @@ const defaultBoxes = [
               </div>
 
               <!-- Default Frame Strip (Canvas CSS style + Purple Placeholders) -->
-              <div 
-                v-else 
+              <div
+                v-else
                 class="frame-strip-container default-frame-strip"
-                :style="{ backgroundColor: frameConfigs[frame.id]?.bg || '#fff', borderColor: frameConfigs[frame.id]?.border || '#000', aspectRatio: '600/1800' }"
+                :style="{
+                  backgroundColor: frameConfigs[frame.id]?.bg || '#fff',
+                  borderColor: frameConfigs[frame.id]?.border || '#000',
+                  aspectRatio: '600/1800',
+                }"
               >
                 <!-- Header -->
-                <div 
+                <div
                   class="default-frame-header"
-                  :style="{ background: frameConfigs[frame.id]?.headerBg || '#000', color: frameConfigs[frame.id]?.headerText || '#fff' }"
+                  :style="{
+                    background: frameConfigs[frame.id]?.headerBg || '#000',
+                    color: frameConfigs[frame.id]?.headerText || '#fff',
+                  }"
                 >
                   ✦ {{ frame.name }} ✦
                 </div>
@@ -253,12 +272,11 @@ const defaultBoxes = [
                 ></div>
 
                 <!-- Footer -->
-                <div 
+                <div
                   class="default-frame-footer"
                   :style="{ background: frameConfigs[frame.id]?.footerBg || '#eee' }"
                 ></div>
               </div>
-
             </div>
           </div>
         </swiper-slide>
@@ -266,7 +284,15 @@ const defaultBoxes = [
 
       <!-- Right Arrow -->
       <button class="carousel-nav-btn next-btn" @click="scrollRight" aria-label="Berikutnya">
-        <svg style="width: 20px; height: 20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          style="width: 20px; height: 20px"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="4.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <polyline points="9 18 15 12 9 6"></polyline>
         </svg>
       </button>
@@ -274,13 +300,7 @@ const defaultBoxes = [
 
     <!-- Bottom Button Section -->
     <div class="footer-btn-container">
-      <button 
-        class="btn-next" 
-        @click="handleNext" 
-        :disabled="!selectedLocalFrame"
-      >
-        Next!
-      </button>
+      <button class="btn-next" @click="handleNext" :disabled="!selectedLocalFrame">Next!</button>
     </div>
   </div>
 </template>
@@ -298,14 +318,18 @@ const defaultBoxes = [
   justify-content: space-between;
   padding: 40px 20px;
   box-sizing: border-box;
-  background-color: #E2F0D9; /* Soft green */
+  background-color: #e2f0d9; /* Soft green */
   background-image:
     linear-gradient(45deg, #d3e7c8 25%, transparent 25%),
     linear-gradient(-45deg, #d3e7c8 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, #d3e7c8 75%),
     linear-gradient(-45deg, transparent 75%, #d3e7c8 75%);
   background-size: 80px 80px;
-  background-position: 0 0, 0 40px, 40px -40px, -40px 0px;
+  background-position:
+    0 0,
+    0 40px,
+    40px -40px,
+    -40px 0px;
 }
 
 /* Background Blobs */
@@ -432,7 +456,9 @@ const defaultBoxes = [
 }
 .frame-card-new.selected {
   border-color: #ffffff;
-  box-shadow: 0 0 0 3px #ffffff, 0 15px 40px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    0 0 0 3px #ffffff,
+    0 15px 40px rgba(0, 0, 0, 0.4);
 }
 
 /* Frame Strip Wrapper & Containers */
@@ -557,7 +583,7 @@ const defaultBoxes = [
   align-items: center;
   justify-content: center;
   gap: 12px;
-  background: #7C3AED; /* Vibrant Violet */
+  background: #7c3aed; /* Vibrant Violet */
   color: #ffffff;
   font-family: 'Nunito', sans-serif;
   font-weight: 900;
@@ -573,7 +599,7 @@ const defaultBoxes = [
 .btn-next:hover:not(:disabled) {
   transform: translate(-2px, -2px);
   box-shadow: 7px 7px 0 #000000;
-  background: #8B5CF6;
+  background: #8b5cf6;
 }
 .btn-next:active:not(:disabled) {
   transform: translate(4px, 4px);

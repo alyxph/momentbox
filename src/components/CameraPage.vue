@@ -69,13 +69,13 @@ const previewBoxes = computed(() => {
   const { isDefault, baseW, baseH } = previewBase.value;
 
   if (isDefault) {
-    const pw = baseW - 80;
-    const ph = (baseH - 420) / 4;
-    const startY = 240;
+    const pw = 560;
+    const ph = 425;
+    const startY = 20;
     const gap = 20;
     return Array.from({ length: 4 }, (_, idx) => ({
       id: idx + 1,
-      x: 40,
+      x: 20,
       y: startY + idx * (ph + gap),
       width: pw,
       height: ph,
@@ -122,13 +122,26 @@ function retakeBoxStyle(box) {
 
 async function startCamera() {
   cameraError.value = '';
-  // Try progressively simpler constraints for broader device compatibility
-  // (Samsung Browser on Android 10 can reject complex constraint objects)
-  const constraintsList = [
+
+  // Baca deviceId yang tersimpan dari localStorage (di-set dari halaman Settings)
+  const savedDeviceId = localStorage.getItem('photobooth_camera_device_id');
+
+  // Susun daftar constraints: prioritaskan deviceId tersimpan, lalu fallback
+  const constraintsList = [];
+
+  if (savedDeviceId) {
+    constraintsList.push(
+      { video: { deviceId: { exact: savedDeviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+      { video: { deviceId: savedDeviceId }, audio: false },
+    );
+  }
+
+  constraintsList.push(
     { video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }, audio: false },
     { video: { facingMode: 'user' }, audio: false },
     { video: true, audio: false },
-  ];
+  );
+
   for (const constraints of constraintsList) {
     try {
       stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -531,123 +544,125 @@ function drawFramePreview() {
   const photosSnapshot = [...props.photos];
 
   if (isDefault) {
-    const cfg = frameConfigs[layout.id];
-    ctx.fillStyle = cfg.bg;
-    ctx.fillRect(0, 0, baseW, baseH);
+    // Clear canvas to transparent
+    ctx.clearRect(0, 0, baseW, baseH);
 
-    ctx.fillStyle = cfg.headerBg;
-    ctx.fillRect(0, 0, baseW, 200);
-    ctx.fillStyle = cfg.headerText;
-    ctx.font = 'bold 50px Bangers';
-    ctx.textAlign = 'center';
-    ctx.fillText(`✦ ${layout.name} ✦`, baseW / 2, 125);
+    const boxes = previewBoxes.value;
+    
+    // Draw placeholder backgrounds first (light purple) so they show up even when photos aren't taken yet
+    boxes.forEach((box, idx) => {
+      const src = photosSnapshot[idx];
+      const x = box.x;
+      const y = box.y;
+      const pw = box.width;
+      const ph = box.height;
 
-    ctx.fillStyle = cfg.footerBg;
-    ctx.fillRect(0, baseH - 100, baseW, 100);
+      // Draw purple placeholder background
+      ctx.fillStyle = '#8A3DFF';
+      ctx.fillRect(x, y, pw, ph);
 
-    ctx.strokeStyle = cfg.border;
-    ctx.lineWidth = 20;
-    ctx.strokeRect(10, 10, baseW - 20, baseH - 20);
+      // Draw slot number in center
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 80px Bangers';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(box.id), x + pw / 2, y + ph / 2);
 
-    const pw = baseW - 80;
-    const ph = (baseH - 420) / 4;
-    const startY = 240;
-    const gap = 20;
-
-    photosSnapshot.forEach((src, idx) => {
-      if (!src) return;
-      const img = new Image();
-      img.onload = () => {
-        if (seq !== drawSeq) return;
-        applyScale();
-        const y = startY + idx * (ph + gap);
-        const iw = img.width;
-        const ih = img.height;
-        const aspect = pw / ph;
-        let sw;
-        let sh;
-        let sx;
-        let sy;
-        if (iw / ih > aspect) {
-          sh = ih;
-          sw = ih * aspect;
-          sx = (iw - sw) / 2;
-          sy = 0;
-        } else {
-          sw = iw;
-          sh = iw / aspect;
-          sx = 0;
-          sy = (ih - sh) / 2;
-        }
-        ctx.drawImage(img, sx, sy, sw, sh, 40, y, pw, ph);
+      // Draw photo on top if exists
+      if (src) {
+        const img = new Image();
+        img.onload = () => {
+          if (seq !== drawSeq) return;
+          applyScale();
+          const iw = img.width;
+          const ih = img.height;
+          const aspect = pw / ph;
+          let sw, sh, sx, sy;
+          if (iw / ih > aspect) {
+            sh = ih;
+            sw = ih * aspect;
+            sx = (iw - sw) / 2;
+            sy = 0;
+          } else {
+            sw = iw;
+            sh = iw / aspect;
+            sx = 0;
+            sy = (ih - sh) / 2;
+          }
+          ctx.drawImage(img, sx, sy, sw, sh, x, y, pw, ph);
+          ctx.strokeStyle = '#000';
+          ctx.lineWidth = 8;
+          ctx.strokeRect(x, y, pw, ph);
+        };
+        img.src = src;
+      } else {
+        // Draw border around empty placeholder
         ctx.strokeStyle = '#000';
-        ctx.lineWidth = 4;
-        ctx.strokeRect(40, y, pw, ph);
-      };
-      img.src = src;
+        ctx.lineWidth = 8;
+        ctx.strokeRect(x, y, pw, ph);
+      }
     });
     return;
   }
-
-  const frameImg = new Image();
-  frameImg.crossOrigin = 'anonymous';
 
   const drawAll = () => {
     if (seq !== drawSeq) return;
     applyScale();
     ctx.clearRect(0, 0, baseW, baseH);
 
-    const order = layout.layerOrder || ['box-1', 'box-2', 'box-3', 'box-4', 'frame'];
-    order.forEach((layerId) => {
-      if (layerId === 'frame') {
-        if (frameImg.complete && layout.frameUrl) {
-          ctx.drawImage(frameImg, 0, 0, baseW, baseH);
-        }
-        return;
+    // Draw placeholders/photos for all boxes in layout (frame overlay is ignored for preview)
+    const boxes = layout.boxes || [];
+    boxes.forEach((box) => {
+      const photoIdx = box.id - 1;
+      const src = photosSnapshot[photoIdx];
+
+      // Draw purple placeholder background
+      ctx.fillStyle = '#8A3DFF';
+      ctx.fillRect(box.x, box.y, box.width, box.height);
+
+      // Draw slot number in center
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 80px Bangers';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(box.id), box.x + box.width / 2, box.y + box.height / 2);
+
+      if (src) {
+        const img = new Image();
+        img.onload = () => {
+          if (seq !== drawSeq) return;
+          applyScale();
+          const iw = img.width;
+          const ih = img.height;
+          const aspect = box.width / box.height;
+          let sw, sh, sx, sy;
+          if (iw / ih > aspect) {
+            sh = ih;
+            sw = ih * aspect;
+            sx = (iw - sw) / 2;
+            sy = 0;
+          } else {
+            sw = iw;
+            sh = iw / aspect;
+            sx = 0;
+            sy = (ih - sh) / 2;
+          }
+          ctx.drawImage(img, sx, sy, sw, sh, box.x, box.y, box.width, box.height);
+          ctx.strokeStyle = '#000';
+          ctx.lineWidth = 8;
+          ctx.strokeRect(box.x, box.y, box.width, box.height);
+        };
+        img.src = src;
+      } else {
+        // Draw border around empty placeholder
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 8;
+        ctx.strokeRect(box.x, box.y, box.width, box.height);
       }
-
-      const boxId = parseInt(layerId.split('-')[1], 10);
-      const box = layout.boxes?.find(b => b.id === boxId);
-      const src = photosSnapshot[boxId - 1];
-      if (!box || !src) return;
-
-      const img = new Image();
-      img.onload = () => {
-        if (seq !== drawSeq) return;
-        applyScale();
-        const iw = img.width;
-        const ih = img.height;
-        const aspect = box.width / box.height;
-        let sw;
-        let sh;
-        let sx;
-        let sy;
-        if (iw / ih > aspect) {
-          sh = ih;
-          sw = ih * aspect;
-          sx = (iw - sw) / 2;
-          sy = 0;
-        } else {
-          sw = iw;
-          sh = iw / aspect;
-          sx = 0;
-          sy = (ih - sh) / 2;
-        }
-        ctx.drawImage(img, sx, sy, sw, sh, box.x, box.y, box.width, box.height);
-        if (order.indexOf('frame') > order.indexOf(layerId) && frameImg.complete) {
-          ctx.drawImage(frameImg, 0, 0, baseW, baseH);
-        }
-      };
-      img.src = src;
     });
   };
 
-  if (layout.frameUrl) {
-    frameImg.onload = drawAll;
-    frameImg.src = layout.frameUrl;
-  } else {
-    drawAll();
-  }
+  drawAll();
 }
 
 onMounted(() => {

@@ -303,9 +303,9 @@ body {
 .preview-panel {
   width: 100%;
   max-width: min(
-    340px,
-    58vh
-  ); /* Diberi batas proporsional (340px) agar pratinjau melebar maksimal secara seimbang, tidak melar berlebihan di monitor desktop super besar */
+    500px,
+    92vh
+  ); /* Diperbesar signifikan untuk layar laptop / tablet agar pratinjau kotak terlihat sangat besar */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -315,12 +315,12 @@ body {
 
 .preview-strip {
   width: auto;
-  height: 86vh; /* Di-stretch setinggi 86% viewport height agar memanfaatkan ruang vertikal secara maksimal */
+  height: 92vh; /* Di-stretch setinggi 92% viewport height */
   max-width: 100%;
-  background: #ffffff;
-  padding: 6px;
-  border: 4px solid #000000;
-  box-shadow: 6px 6px 0 #000000;
+  background: transparent;
+  padding: 0;
+  border: none;
+  box-shadow: none;
 }
 
 /* ========== MOBILE & TABLET RESPONSIVE ========== */
@@ -353,7 +353,7 @@ body {
   }
 
   .preview-panel {
-    max-width: 260px; /* Diperbesar agar mirip dengan mockup yang diinginkan user */
+    max-width: 320px; /* Diperbesar dari 260px agar preview kotak di HP lebih mantap */
     margin: 0 auto;
     width: 100%;
     flex-direction: column;
@@ -364,9 +364,12 @@ body {
   }
 
   .preview-strip {
-    box-shadow: 4px 4px 0 #000000;
+    box-shadow: none;
     width: 100%;
     height: auto;
+    background: transparent;
+    padding: 0;
+    border: none;
   }
 
   .neo-block {
